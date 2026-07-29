@@ -1,0 +1,4 @@
+g++ -O3 -std=c++17 -I. test_hnsw.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp -o test_hnsw
+g++ -O3 -std=c++17 -I. test_mtree.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp -o test_mtree
+g++ -O3 -std=c++17 -I. test_pctree.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp -o test_pctree
+g++ -O3 -std=c++17 -I. test_vtree.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp -o test_vtree
