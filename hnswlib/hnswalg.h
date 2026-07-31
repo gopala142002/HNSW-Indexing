@@ -1532,6 +1532,66 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return result;
     }
 
+    // searchKnnVPTree()
+    //
+    // Drop-in replacement for searchKnn() that bypasses the upper-layer greedy
+    // walk of HNSW (levels maxlevel_ -> 1) and instead uses the VantagePointTree
+    // to obtain a high-quality entry point directly into level 0.
+    std::priority_queue<std::pair<dist_t, labeltype>>
+    searchKnnVPTree(
+            const void* query_data,
+            size_t k,
+            BaseFilterFunctor* isIdAllowed = nullptr) const {
+
+        priority_queue<pair<dist_t, labeltype>> result;
+        if (cur_element_count == 0) return result;
+
+        tableint currObj = enterpoint_node_;
+        dist_t curdist = fstdistfunc_(query_data,
+                                       getDataByInternalId(enterpoint_node_),
+                                       dist_func_param_);
+
+        if (vpt_ != nullptr) {
+            const float* query_f = reinterpret_cast<const float*>(query_data);
+            vector<int> seeds = vpt_->searchNN(query_f);
+
+            for (int seed_id : seeds) {
+                if (seed_id < 0 || static_cast<size_t>(seed_id) >= cur_element_count)
+                    continue;
+                dist_t d = fstdistfunc_(query_data,
+                                         getDataByInternalId(static_cast<tableint>(seed_id)),
+                                         dist_func_param_);
+                if (d < curdist) {
+                    curdist = d;
+                    currObj = static_cast<tableint>(seed_id);
+                }
+            }
+        }
+
+        priority_queue<pair<dist_t, tableint>,
+                            vector<pair<dist_t, tableint>>,
+                            CompareByFirst> top_candidates;
+
+        bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+        if (bare_bone_search) {
+            top_candidates = searchBaseLayerST<true>(
+                    currObj, query_data, max(ef_, k), isIdAllowed);
+        } else {
+            top_candidates = searchBaseLayerST<false>(
+                    currObj, query_data, max(ef_, k), isIdAllowed);
+        }
+
+        while (top_candidates.size() > k) {
+            top_candidates.pop();
+        }
+        while (!top_candidates.empty()) {
+            pair<dist_t, tableint> rez = top_candidates.top();
+            result.push({rez.first, getExternalLabel(rez.second)});
+            top_candidates.pop();
+        }
+        return result;
+    }
+
     // searchKnnPCTree()
     //
     // Drop-in replacement for searchKnn() that bypasses the upper-layer greedy
