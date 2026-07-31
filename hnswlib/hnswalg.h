@@ -13,6 +13,7 @@
 #include "vtree.h"
 #include "mtree.h"
 #include "pctree.h"
+#include "vpttree.h"
 
 
 
@@ -56,6 +57,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     VoronoiTree* vtree_ = nullptr;
     MTree* mtree_ = nullptr;
     ::PCTree* pctree_ = nullptr;
+    VantagePointTree* vpt_ = nullptr;
     static const tableint MAX_LABEL_OPERATION_LOCKS = 65536;
     static const unsigned char DELETE_MARK = 0x01;
 
@@ -227,6 +229,20 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             64);
     }
 
+    void buildVantagePointTree() {
+
+        delete vpt_;
+
+        vpt_ = new VantagePointTree(
+            data_level0_memory_,
+            data_size_,
+            data_size_ / sizeof(float),
+            cur_element_count,
+            64);
+
+        vpt_->build();
+    }
+
     int getVTreeHeight() const {
         return (vtree_ != nullptr) ? vtree_->getHeight() : -1;
     }
@@ -237,6 +253,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
     int getPCTreeHeight() const {
         return (pctree_ != nullptr) ? pctree_->getHeight() : -1;
+    }
+
+    int getVPTreeHeight() const {
+        return (vpt_ != nullptr) ? vpt_->getHeight() : -1;
     }
     
     ~HierarchicalNSW() {
@@ -250,6 +270,8 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         mtree_ = nullptr;
         delete pctree_;
         pctree_ = nullptr;
+        delete vpt_;
+        vpt_ = nullptr;
         free(data_level0_memory_);
         data_level0_memory_ = nullptr;
         for (tableint i = 0; i < cur_element_count; i++) {
