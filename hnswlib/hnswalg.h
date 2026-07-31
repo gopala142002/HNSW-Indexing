@@ -20,9 +20,6 @@ namespace hnswlib {
 typedef unsigned int tableint;
 typedef unsigned int linklistsizeint;
 
-// Bring commonly used std symbols into the hnswlib namespace for unqualified
-// usage in this header (keeps code short without reintroducing
-// "using namespace std;")
 using std::vector;
 using std::priority_queue;
 using std::pair;
@@ -212,8 +209,8 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             offsetData_,
             data_size_ / sizeof(float),
             cur_element_count,
-            8,
-            32);
+            5,
+            64);
 
         mtree_->build();
     }

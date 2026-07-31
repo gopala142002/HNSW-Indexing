@@ -12,25 +12,25 @@ MTNode::~MTNode()
     }
 }
 
-MTree::MTree(char* data_level0_memory,size_t data_size,size_t dim,size_t num_vectors,int maxRoutingEntries,int maxLeafObjects)
+MTree::MTree(char* data_level0_memory, size_t data_size, size_t dim, size_t num_vectors, int maxRoutingEntries, int maxLeafObjects)
 {
-    this->data_level0_memory=data_level0_memory;
-    this->data_size=data_size;
-    this->dim=dim;
-    this->num_vectors=num_vectors;
-    this->maxRoutingEntries=maxRoutingEntries;
-    this->maxLeafObjects=maxLeafObjects;
+    this->data_level0_memory = data_level0_memory;
+    this->data_size = data_size;
+    this->dim = dim;
+    this->num_vectors = num_vectors;
+    this->maxRoutingEntries = maxRoutingEntries;
+    this->maxLeafObjects = maxLeafObjects;
 }
 
-MTree::MTree(char* data_level0_memory,size_t data_size,size_t vector_offset,size_t dim,size_t num_vectors,int maxRoutingEntries,int maxLeafObjects)
+MTree::MTree(char* data_level0_memory, size_t data_size, size_t vector_offset, size_t dim, size_t num_vectors, int maxRoutingEntries, int maxLeafObjects)
 {
-    this->data_level0_memory=data_level0_memory;
-    this->data_size=data_size;
-    this->vector_offset=vector_offset;
-    this->dim=dim;
-    this->num_vectors=num_vectors;
-    this->maxRoutingEntries=maxRoutingEntries;
-    this->maxLeafObjects=maxLeafObjects;   
+    this->data_level0_memory = data_level0_memory;
+    this->data_size = data_size;
+    this->vector_offset = vector_offset;
+    this->dim = dim;
+    this->num_vectors = num_vectors;
+    this->maxRoutingEntries = maxRoutingEntries;
+    this->maxLeafObjects = maxLeafObjects;   
     
     if (this->data_level0_memory == nullptr) 
     {
@@ -38,14 +38,13 @@ MTree::MTree(char* data_level0_memory,size_t data_size,size_t vector_offset,size
     }
     if (this->maxRoutingEntries < 2) 
     {
-        this->maxRoutingEntries= 2;
+        this->maxRoutingEntries = 2;
     }
     if (this->maxLeafObjects < 2) 
     {
-        this->maxLeafObjects= 2;
+        this->maxLeafObjects = 2;
     } 
 }
-
 
 MTree::~MTree() 
 {
@@ -170,11 +169,14 @@ MTree::InsertResult MTree::insertIntoNode(MTNode* node, int vectorID)
         result = insertIntoNode(node->routingEntries[bestEntry].child, vectorID);
         if (result.split) 
         {
+            // Remove the child entry that split and insert the two new split child entries
             node->routingEntries.erase(node->routingEntries.begin() + bestEntry);
             node->routingEntries.insert(node->routingEntries.end(), result.entries.begin(), result.entries.end());
+            
+            // If this internal node exceeds maximum capacity, split it and return the result upwards
             if (node->routingEntries.size() > static_cast<size_t>(maxRoutingEntries)) 
             {
-                result = splitNode(node);
+                return splitNode(node);
             } 
             else 
             {
@@ -195,6 +197,7 @@ MTree::InsertResult MTree::splitNode(MTNode* node)
         return result;
     }
 
+    // --- LEAF NODE SPLIT ---
     if (node->isLeaf) 
     {
         std::vector<int> ids;
@@ -257,9 +260,14 @@ MTree::InsertResult MTree::splitNode(MTNode* node)
         return result;
     }
 
+    // --- INTERNAL NODE SPLIT (FIXED) ---
+
+    // 1. Preserve child subtrees in oldEntries before clearing
+    std::vector<RoutingEntry> oldEntries = node->routingEntries;
+
     std::vector<int> ids;
-    ids.reserve(node->routingEntries.size());
-    for (const RoutingEntry& entry : node->routingEntries) 
+    ids.reserve(oldEntries.size());
+    for (const RoutingEntry& entry : oldEntries) 
     {
         ids.push_back(entry.pivotID);
     }
@@ -275,14 +283,17 @@ MTree::InsertResult MTree::splitNode(MTNode* node)
 
     MTNode* left = node;
     MTNode* right = new MTNode();
+    left->isLeaf = false;
     right->isLeaf = false;
 
+    // 2. Clear old routing lists
     left->routingEntries.clear();
     left->objectEntries.clear();
     right->routingEntries.clear();
     right->objectEntries.clear();
 
-    for (const RoutingEntry& entry : node->routingEntries) 
+    // 3. Redistribute child branches from saved oldEntries
+    for (const RoutingEntry& entry : oldEntries) 
     {
         const float d1 = distanceToId(entry.pivotID, first);
         const float d2 = distanceToId(entry.pivotID, second);
@@ -295,6 +306,18 @@ MTree::InsertResult MTree::splitNode(MTNode* node)
         {
             right->routingEntries.push_back(copy);
         }
+    }
+
+    // Ensure neither left nor right internal node is left completely empty
+    if (left->routingEntries.empty() && !right->routingEntries.empty()) 
+    {
+        left->routingEntries.push_back(right->routingEntries.back());
+        right->routingEntries.pop_back();
+    } 
+    else if (right->routingEntries.empty() && !left->routingEntries.empty()) 
+    {
+        right->routingEntries.push_back(left->routingEntries.back());
+        left->routingEntries.pop_back();
     }
 
     RoutingEntry leftEntry;

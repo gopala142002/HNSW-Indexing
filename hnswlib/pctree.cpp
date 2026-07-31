@@ -244,7 +244,9 @@ int PCTree::getHeight(PCNode* root) const
     int rightHeight = getHeight(root->right);
     return 1 + std::max(leftHeight, rightHeight);
 }
+
 int PCTree::getHeight() const
 {
     return getHeight(root);
 }
+

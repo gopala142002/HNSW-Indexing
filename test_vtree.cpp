@@ -56,7 +56,7 @@ float recall_at_k(const int* gt, int gt_k, const std::vector<size_t>& returned, 
 int main(int argc, char** argv) {
 
 
-    const std::string data_dir = (argc > 1) ? argv[1] : "./datasets/sift";
+    const std::string data_dir = (argc > 1) ? argv[1] : "./datasets/gist";
     const std::string base_path = data_dir + "/base.fvecs";
     const std::string query_path = data_dir + "/query.fvecs";
     const std::string gt_path = data_dir + "/groundtruth.ivecs";
@@ -180,6 +180,12 @@ int main(int argc, char** argv) {
             << ", Avg latency (us) = " << std::fixed << std::setprecision(1) << avg_time_hnsw_us << "\n";
         std::cout << "VTree -> level-0:    Recall@" << k << " = " << std::setprecision(4) << avg_recall_vtree
             << ", Avg latency (us) = " << std::fixed << std::setprecision(1) << avg_time_vtree_us << "\n";
+
+            std::cout << "\n";
+        std::cout << "Speedup (HNSW / PCTree):     " << std::fixed << std::setprecision(2)
+                << (avg_time_hnsw_us / avg_time_vtree_us) << "x\n";
+        std::cout << "Recall loss (HNSW - PCTree): " << std::fixed << std::setprecision(4)
+                << (avg_recall_hnsw - avg_recall_vtree) << "\n";
 
     return 0;
 }
