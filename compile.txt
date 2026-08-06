@@ -3,3 +3,6 @@ g++ -O3 -std=c++17 -I. test_mtree.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswl
 g++ -O3 -std=c++17 -I. test_pctree.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp -o test_pctree
 g++ -O3 -std=c++17 -I. test_vtree.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp -o test_vtree
 g++ -O3 -std=c++17 -I. test_vpttree.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp -o test_vpttree
+
+
+python3 run_experiments.py --datasets sift

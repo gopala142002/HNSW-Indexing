@@ -10,6 +10,7 @@
 #include <numeric>
 #include <unordered_set>
 #include <cstdint>
+#include <cstdlib>
 #include "test_hnsw_shared.h"
 #include "hnswlib/hnswlib.h"
 
@@ -55,18 +56,25 @@ float recall_at_k(const int* gt, int gt_k, const std::vector<size_t>& returned, 
 
 int main(int argc, char** argv) {
 
-    const std::string data_dir = (argc > 1) ? argv[1] : "./datasets/sift";
+    const std::string data_dir = (argc > 1) ? argv[1] : "./datasets/gist";
     const std::string base_path = data_dir + "/base.fvecs";
     const std::string query_path = data_dir + "/query.fvecs";
     const std::string gt_path = data_dir + "/groundtruth.ivecs";
   
-    const int M = 16;
-    const int ef_construction = 200;
-    const int ef_search = 50;
+    // Parse command-line parameters
+    // Usage: test_vpttree <dataset_path> [M] [ef_construction] [ef_search] [leaf_capacity]
+    int M = 16;
+    int ef_construction = 200;
+    int ef_search = 50;
+    int leaf_cap = 64;
+    
+    if (argc > 2) M = std::atoi(argv[2]);
+    if (argc > 3) ef_construction = std::atoi(argv[3]);
+    if (argc > 4) ef_search = std::atoi(argv[4]);
+    if (argc > 5) leaf_cap = std::atoi(argv[5]);
+    
     const int k = 30;  
-    const int num_queries = 10000;
-
-    const int leaf_cap = 64;  
+    const int num_queries = 10000;  
                                     
     std::cout << "Loading dataset base vectors from"<< base_path<<"\n";
     int base_dim, base_n;

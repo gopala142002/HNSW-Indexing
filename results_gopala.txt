@@ -29,6 +29,16 @@ for sift1M :-
         avg latency hnsw :- 121.6 us
         avg latency mtree :- 77.4 us
         speedup :- 1.57
+    vpttree
+        Recall HNSW :- 0.9086
+        Recall vpttree :- 0.9089
+        hnsw tree built time :- 383.6 s
+        vpttree built time :- 1.9237 s
+        hnsw levels :- 5
+        vpttree height :- 14
+        avg latency hnsw :- 132.2
+        avg latency vpttree :- 89.6
+        speedup :- 1.48
 
 
 for glove :- 
@@ -62,6 +72,16 @@ for glove :-
         avg latency hnsw :- 220.1us
         avg latency mtree :- 208.0 us
         speedup :- 1.06x
+    vpttree
+        Recall HNSW :-  0.4987
+        Recall vpttree :- 0.5217
+        hnsw tree built time :- 917.7 s 
+        vpttree built time :- 3.8857 
+        hnsw levels :- 5
+        vpttree height :- 15 
+        avg latency hnsw :- 210.3
+        avg latency vpttree :- 208.6
+        speedup :- 1.01
 
     
 for gist :- 
@@ -95,3 +115,16 @@ for gist :-
         avg latency hnsw :- 464.8
         avg latency mtree :- 435.7
         speedup :- 1.07
+    vpttree
+        Recall HNSW :- 0.6579
+        Recall vpttree :- 0.6560
+        hnsw tree built time :- 1443.8 s
+        vpttree built time :- 8.3064
+        hnsw levels :- 5
+        vpttree height :- 14
+        avg latency hnsw :- 441.4
+        avg latency vpttree :- 411.8
+        speedup :- 1.07
+
+
+vttree for 2 pivots

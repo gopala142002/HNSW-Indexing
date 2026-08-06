@@ -9,6 +9,7 @@
 #include <numeric>
 #include <unordered_set>
 #include <cstdint>
+#include <cstdlib>
 #include "test_hnsw_shared.h"
 
 
@@ -62,12 +63,18 @@ int main(int argc, char** argv)
     const std::string query_path = data_dir + "/query.fvecs";
     const std::string gt_path = data_dir + "/groundtruth.ivecs";
     
-
-    const int M= 16;
-    const int ef_construction = 200;
-    const int ef_search = 50;
+    // Parse command-line parameters
+    // Usage: test_hnsw <dataset_path> [M] [ef_construction] [ef_search]
+    int M = 16;
+    int ef_construction = 200;
+    int ef_search = 50;
+    
+    if (argc > 2) M = std::atoi(argv[2]);
+    if (argc > 3) ef_construction = std::atoi(argv[3]);
+    if (argc > 4) ef_search = std::atoi(argv[4]);
+    
     const int k = 30;   
-    const int num_queries =10000; 
+    const int num_queries = 10000; 
 
     std::cout<<"Loading SIFT1M base vectors from "<< base_path<<"\n";
     int base_dim, base_n;
