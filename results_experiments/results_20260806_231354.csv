@@ -1,0 +1,2 @@
+structure,dataset,param_M,param_ef_construction,param_ef_search,param_leafCapacity,param_numPivots,metric_recall,metric_build_time,metric_latency,metric_height,metric_speedup
+hnsw,sift,4,50,20,,,0.0,366.6,75.5,,
