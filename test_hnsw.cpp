@@ -69,9 +69,12 @@ int main(int argc, char** argv)
     int ef_construction = 200;
     int ef_search = 50;
     
-    if (argc > 2) M = std::atoi(argv[2]);
-    if (argc > 3) ef_construction = std::atoi(argv[3]);
-    if (argc > 4) ef_search = std::atoi(argv[4]);
+    if (argc > 2) 
+        M = std::atoi(argv[2]);
+    if (argc > 3) 
+        ef_construction = std::atoi(argv[3]);
+    if (argc > 4) 
+        ef_search = std::atoi(argv[4]);
     
     const int k = 30;   
     const int num_queries = 10000; 

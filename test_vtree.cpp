@@ -54,27 +54,31 @@ float recall_at_k(const int* gt, int gt_k, const std::vector<size_t>& returned, 
     return static_cast<float>(hits) / static_cast<float>(std::min(gt_k, k));
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) 
+{
 
 
     const std::string data_dir = (argc > 1) ? argv[1] : "./datasets/gist";
     const std::string base_path = data_dir + "/base.fvecs";
     const std::string query_path = data_dir + "/query.fvecs";
     const std::string gt_path = data_dir + "/groundtruth.ivecs";
-  
-    // Parse command-line parameters
-    // Usage: test_vtree <dataset_path> [M] [ef_construction] [ef_search] [num_pivots] [leaf_capacity]
+    
     int M = 16;
     int ef_construction = 200;
     int ef_search = 50;
     int num_pivots = 5;
     int leaf_cap = 64;
     
-    if (argc > 2) M = std::atoi(argv[2]);
-    if (argc > 3) ef_construction = std::atoi(argv[3]);
-    if (argc > 4) ef_search = std::atoi(argv[4]);
-    if (argc > 5) num_pivots = std::atoi(argv[5]);
-    if (argc > 6) leaf_cap = std::atoi(argv[6]);
+    if (argc > 2)
+        M = std::atoi(argv[2]);
+    if (argc > 3) 
+        ef_construction = std::atoi(argv[3]);
+    if (argc > 4) 
+        ef_search = std::atoi(argv[4]);
+    if (argc > 5) 
+        num_pivots = std::atoi(argv[5]);
+    if (argc > 6) 
+        leaf_cap = std::atoi(argv[6]);
 
     const int k = 30;  
     const int num_queries = 10000;  
@@ -110,8 +114,7 @@ int main(int argc, char** argv) {
     hnsw.setEf(ef_search);
 
 
-    std::cout << "\nBuilding VoronoiTree (numPivots=" << num_pivots
-              << ", leafCapacity=" << leaf_cap << ")...\n";
+    std::cout << "\nBuilding VoronoiTree (numPivots=" << num_pivots << ", leafCapacity=" << leaf_cap << ")...\n";
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -149,7 +152,8 @@ int main(int argc, char** argv) {
 
         std::vector<size_t> hnsw_ids;
         hnsw_ids.reserve(k);
-        while (!pq_hnsw.empty()) {
+        while (!pq_hnsw.empty()) 
+        {
             hnsw_ids.push_back(pq_hnsw.top().second);
             pq_hnsw.pop();
         }
@@ -163,7 +167,8 @@ int main(int argc, char** argv) {
 
         std::vector<size_t> vtree_ids;
         vtree_ids.reserve(k);
-        while (!pq_vt.empty()) {
+        while (!pq_vt.empty()) 
+        {
             vtree_ids.push_back(pq_vt.top().second);
             pq_vt.pop();
         }

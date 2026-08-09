@@ -81,17 +81,20 @@ int main(int argc, char** argv) {
     const std::string query_path = data_dir + "/query.fvecs";
     const std::string gt_path = data_dir + "/groundtruth.ivecs";
 
-    // Parse command-line parameters
-    // Usage: test_pctree <dataset_path> [M] [ef_construction] [ef_search] [leaf_capacity]
+
     int M = 16;
     int ef_construction = 200;
     int ef_search = 50;
     int leaf_capacity = 64;
     
-    if (argc > 2) M = std::atoi(argv[2]);
-    if (argc > 3) ef_construction = std::atoi(argv[3]);
-    if (argc > 4) ef_search = std::atoi(argv[4]);
-    if (argc > 5) leaf_capacity = std::atoi(argv[5]);
+    if (argc > 2) 
+        M = std::atoi(argv[2]);
+    if (argc > 3) 
+        ef_construction = std::atoi(argv[3]);
+    if (argc > 4) 
+        ef_search = std::atoi(argv[4]);
+    if (argc > 5) 
+        leaf_capacity = std::atoi(argv[5]);
 
     const int k = 30;   
     const int num_queries = 10000; 
