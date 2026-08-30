@@ -1,8 +1,46 @@
-g++ -O3 -std=c++17 -I. test_hnsw.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp -o test_hnsw
-g++ -O3 -std=c++17 -I. test_mtree.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp -o test_mtree
-g++ -O3 -std=c++17 -I. test_pctree.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp -o test_pctree
-g++ -O3 -std=c++17 -I. test_vtree.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp -o test_vtree
-g++ -O3 -std=c++17 -I. test_vpttree.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp -o test_vpttree
+g++ -O3 -std=c++17 -I. -Ihnswlib -I/usr/include/eigen3 \
+test_hnsw.cpp \
+hnswlib/pctree.cpp \
+hnswlib/vtree.cpp \
+hnswlib/mtree.cpp \
+hnswlib/vpttree.cpp \
+hnswlib/kmeanstree.cpp \
+-o test_hnsw
 
+g++ -O3 -std=c++17 -I. -Ihnswlib -I/usr/include/eigen3 \
+test_mtree.cpp \
+hnswlib/pctree.cpp \
+hnswlib/vtree.cpp \
+hnswlib/mtree.cpp \
+hnswlib/vpttree.cpp \
+hnswlib/kmeanstree.cpp \
+-o test_mtree
 
-python3 run_experiments.py --datasets sift
+g++ -O3 -std=c++17 -I. -Ihnswlib -I/usr/include/eigen3 \
+test_pctree.cpp \
+hnswlib/pctree.cpp \
+hnswlib/vtree.cpp \
+hnswlib/mtree.cpp \
+hnswlib/vpttree.cpp \
+hnswlib/kmeanstree.cpp \
+-o test_pctree
+
+g++ -O3 -std=c++17 -I. -Ihnswlib -I/usr/include/eigen3 \
+test_vtree.cpp \
+hnswlib/pctree.cpp \
+hnswlib/vtree.cpp \
+hnswlib/mtree.cpp \
+hnswlib/vpttree.cpp \
+hnswlib/kmeanstree.cpp \
+-o test_vtree
+
+g++ -O3 -std=c++17 -I. -Ihnswlib -I/usr/include/eigen3 \
+test_vpttree.cpp \
+hnswlib/pctree.cpp \
+hnswlib/vtree.cpp \
+hnswlib/mtree.cpp \
+hnswlib/vpttree.cpp \
+hnswlib/kmeanstree.cpp \
+-o test_vpttree
+
+g++ -O3 -std=c++17 -I. -Ihnswlib -I/usr/include/eigen3 combined_test.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp hnswlib/kmeanstree.cpp -o combined_test

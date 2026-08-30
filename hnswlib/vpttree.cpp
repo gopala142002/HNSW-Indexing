@@ -80,6 +80,7 @@ void VantagePointTree::build()
     std::iota(allIndices.begin(), allIndices.end(), 0);
 
     root = buildRecursive(std::move(allIndices));
+    preprocessLeafEntryPoints(root);
 }
 
 VPTNode* VantagePointTree::buildRecursive(std::vector<int>&& indices) 
@@ -163,6 +164,97 @@ VPTNode* VantagePointTree::buildRecursive(std::vector<int>&& indices)
         node->right->parent = node;
 
     return node;
+}
+
+
+std::vector<float> VantagePointTree::computeLeafCentroid(const VPTNode* leaf) const
+{
+    std::vector<float> centroid(dim, 0.0f);
+    if (leaf == nullptr || leaf->vectorIndices.empty())
+    {
+        return centroid;
+    }
+    for (int id : leaf->vectorIndices)
+    {
+        const float* vec = getVector(id);
+        for (size_t d = 0; d < dim; ++d)
+        {
+            centroid[d] += vec[d];
+        }
+    }
+    const float invCount =1.0f / static_cast<float>(leaf->vectorIndices.size());
+    for (size_t d = 0; d < dim; ++d)
+    {
+        centroid[d] *= invCount;
+    }
+    return centroid;
+}
+int VantagePointTree::findNearestToCentroid(const VPTNode* leaf,const std::vector<float>& centroid) const
+{
+    if (leaf == nullptr || leaf->vectorIndices.empty())
+    {
+        return -1;
+    }
+    int nearestId = -1;
+    float minDist = std::numeric_limits<float>::max();
+    for (int id : leaf->vectorIndices)
+    {
+        const float d =distance(centroid.data(), getVector(id));
+        if (d < minDist)
+        {
+            minDist = d;
+            nearestId = id;
+        }
+    }
+    return nearestId;
+}
+void VantagePointTree::preprocessLeafEntryPoints(VPTNode* node)
+{
+    if (node == nullptr)
+    {
+        return;
+    }
+    if (node->isLeaf)
+    {
+        if (!node->vectorIndices.empty())
+        {
+            std::vector<float> centroid =
+                computeLeafCentroid(node);
+
+            node->centroidEntryPoint =
+                findNearestToCentroid(node, centroid);
+        }
+
+        return;
+    }
+    preprocessLeafEntryPoints(node->left);
+    preprocessLeafEntryPoints(node->right);
+}
+
+int VantagePointTree::searchEntryPoint(const float* query) const
+{
+    if (root == nullptr || query == nullptr)
+    {
+        return -1;
+    }
+    const VPTNode* current = root;
+    while (current != nullptr)
+    {
+        if (current->isLeaf)
+        {
+            return current->centroidEntryPoint;
+        }
+        const float d =distance(query, getVector(current->pivot));
+        if (d <= current->median_distance)
+        {
+            current = current->left;
+        }
+        else
+        {
+            current = current->right;
+        }
+    }
+    return -1;
 }
 
 std::vector<int> VantagePointTree::searchNN(const float* query) const 

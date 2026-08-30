@@ -73,6 +73,7 @@ void VoronoiTree::build()
     std::iota(allIndices.begin(), allIndices.end(), 0);
 
     root = buildRecursive(std::move(allIndices));
+    preprocessLeafEntryPoints(root);
 }
 
 
@@ -247,90 +248,159 @@ VTNode* VoronoiTree::buildRecursive(std::vector<int>&& indices)
 
 
 
-namespace 
+std::vector<float> VoronoiTree::computeLeafCentroid(const VTNode* leaf) const
 {
-struct BeamCandidate 
+    std::vector<float> centroid(dim, 0.0f);
+    if (leaf == nullptr || leaf->vectorIndices.empty())
+    {
+        return centroid;
+    }
+    for (int id : leaf->vectorIndices)
+    {
+        const float* vec = getVector(id);
+        for (size_t d = 0; d < dim; ++d)
+        {
+            centroid[d] += vec[d];
+        }
+    }
+    const float invCount =1.0f / static_cast<float>(leaf->vectorIndices.size());
+    for (size_t d = 0; d < dim; ++d)
+    {
+        centroid[d] *= invCount;
+    }
+    return centroid;
+}
+
+
+int VoronoiTree::findNearestToCentroid(const VTNode* leaf,const std::vector<float>& centroid) const
 {
-    float   distance;  
-    int     pivot;     
-    VTNode* node;      
-};
+    if (leaf == nullptr || leaf->vectorIndices.empty())
+    {
+        return -1;
+    }
+    int nearestId = -1;
+    float minDist = std::numeric_limits<float>::max();
 
-struct SeedCandidate 
+    for (int id : leaf->vectorIndices)
+    {
+        const float d =distance(centroid.data(), getVector(id));
+        if (d < minDist)
+        {
+            minDist = d;
+            nearestId = id;
+        }
+    }
+    return nearestId;
+}
+void VoronoiTree::preprocessLeafEntryPoints(VTNode* node)
 {
-    float distance;
-    int   id;
-};
+    if (node == nullptr)
+    {
+        return;
+    }
+    if (node->isLeaf)
+    {
+        if (!node->vectorIndices.empty())
+        {
+            std::vector<float> centroid =computeLeafCentroid(node);
 
-} 
+            node->centroidEntryPoint =findNearestToCentroid(node, centroid);
+        }
+        return;
+    }
+    for (Branch& branch : node->branches)
+    {
+        preprocessLeafEntryPoints(branch.child);
+    }
+}
 
-std::vector<int> VoronoiTree::searchNN(const float* query) const 
+int VoronoiTree::searchEntryPoint(const float* query) const
 {
-    std::vector<int> collected; // pivot IDs (or fallback leaf vectors) gathered so far
+    if (root == nullptr || query == nullptr)
+    {
+        return -1;
+    }
+    const VTNode* current = root;
+    while (current != nullptr)
+    {
+        if (current->isLeaf)
+        {
+            return current->centroidEntryPoint;
+        }
+        if (current->branches.empty())
+        {
+            return -1;
+        }
+        float bestDist = std::numeric_limits<float>::max();
+        const VTNode* bestChild = nullptr;
+        for (const Branch& branch : current->branches)
+        {
+            if (branch.child == nullptr || branch.pivot < 0)
+            {
+                continue;
+            }
+            const float d =distance(query, getVector(branch.pivot));
+            if (d < bestDist)
+            {
+                bestDist = d;
+                bestChild = branch.child;
+            }
+        }
+        if (bestChild == nullptr)
+        {
+            return -1;
+        }
+        current = bestChild;
+    }
+    return -1;
+}
 
-    if (root == nullptr || query == nullptr) 
+std::vector<int> VoronoiTree::searchNN(const float* query) const
+{
+    std::vector<int> collected;
+    if (root == nullptr || query == nullptr)
     {
         return collected;
     }
-
-    struct BeamEntry 
+    const VTNode* current = root;
+    while (current != nullptr)
     {
-        VTNode* node;
-        int pivot; 
-    };
-
-    std::vector<BeamEntry> beam;
-    
-    beam.push_back({root, /*pivot=*/-1});
-
-    while (!beam.empty())
-    {
-        std::vector<BeamCandidate> candidates;
-        candidates.reserve(beam.size() * static_cast<size_t>(numPivots > 0 ? numPivots : 1));
-
-        bool anyInternal = false;
-
-        for (const BeamEntry& entry : beam) 
+        // Reached the leaf: return all vectors in the leaf.
+        if (current->isLeaf)
         {
-            VTNode* node = entry.node;
-            if (node->isLeaf) 
+            collected.insert(
+                collected.end(),
+                current->vectorIndices.begin(),
+                current->vectorIndices.end()
+            );
+            break;
+        }
+        if (current->branches.empty())
+        {
+            break;
+        }
+        // Find the pivot closest to the query.
+        float bestDist = std::numeric_limits<float>::max();
+        const Branch* bestBranch = nullptr;
+        for (const Branch& branch : current->branches)
+        {
+            if (branch.child == nullptr || branch.pivot < 0)
             {
-                if (entry.pivot >= 0) 
-                {
-                    collected.push_back(entry.pivot);
-                } 
-                else 
-                {
-                    collected.insert(collected.end(),node->vectorIndices.begin(),node->vectorIndices.end());
-                }
                 continue;
             }
-
-            anyInternal = true;
-            for (const Branch& b : node->branches) 
+            const float d =distance(query, getVector(branch.pivot));
+            if (d < bestDist)
             {
-                const float d = distance(query, getVector(b.pivot));
-                candidates.push_back(BeamCandidate{d, b.pivot, b.child});
+                bestDist = d;
+                bestBranch = &branch;
             }
         }
-        
-        if (!candidates.empty()) 
+        if (bestBranch == nullptr)
         {
-            auto best = std::min_element(candidates.begin(), candidates.end(),
-                [](const BeamCandidate& a, const BeamCandidate& b) 
-                {
-                    return a.distance < b.distance;
-                });
-            candidates.resize(1);
-            candidates[0] = *best;
+            break;
         }
-
-        beam.clear();
-        beam.reserve(candidates.size());
-        for (const BeamCandidate& c : candidates) 
-        {
-            beam.push_back({c.node, c.pivot});
-        }
+        // Continue through the child of the closest pivot.
+        current = bestBranch->child;
     }
     return collected;
 }

@@ -6,31 +6,26 @@
 class PCNode 
 {
     public:
-    bool isLeaf;    
+    bool isLeaf;
     std::vector<float> principalComponent;
-    float medianProjection;
+    std::vector<float> splitPoints;
     float parentDotProduct;
-    PCNode* left;
-    PCNode* right;
+    std::vector<PCNode*> children;
     std::vector<int> vectorIndices;
     int representative;
-    
     PCNode()
     {
-        isLeaf=false;
-        medianProjection=0.0f;
-        parentDotProduct=1.0f;
-        left=nullptr;
-        right=nullptr;
-        representative=-1;
+        isLeaf = false;
+        parentDotProduct = 1.0f;
+        representative = -1;
     }
-
-    ~PCNode() 
+    ~PCNode()
     {
-        delete left;
-        delete right;
+        for (PCNode* child : children)
+            delete child;
     }
 };
+
 
 class PCTree 
 {
@@ -40,7 +35,7 @@ class PCTree
         size_t dim;
         size_t num_vectors;
         int leafCapacity;
-        
+        int numPartitions;
         PCNode* root;
 
         inline const float* getVector(int id) const 
@@ -78,7 +73,7 @@ class PCTree
             return result;
         }
     public:
-        PCTree(const char* data_level0_memory, size_t data_size, size_t dim,size_t num_vectors, int leafCapacity);
+        PCTree(const char* data_level0_memory, size_t data_size, size_t dim,size_t num_vectors, int leafCapacity,int numPartitions);
         ~PCTree();
         std::vector<int> searchNN(const float* query) const;
         int getHeight(PCNode* root) const;

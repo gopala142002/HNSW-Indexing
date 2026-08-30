@@ -98,6 +98,7 @@ void MTree::build() {
     {
         insertObject(static_cast<int>(i));
     }
+    preprocessLeafEntryPoints(root);
 }
 
 void MTree::insert(int vectorID) 
@@ -413,6 +414,46 @@ int MTree::greedySearch(const float* query) const
     return bestId;
 }
 
+
+int MTree::searchEntryPoint(const float* query) const
+{
+    if (root == nullptr || query == nullptr)
+    {
+        return -1;
+    }
+    const MTNode* node = root;
+    while (node != nullptr && !node->isLeaf)
+    {
+        if (node->routingEntries.empty())
+        {
+            return -1;
+        }
+        int bestEntry = -1;
+        float bestDist = std::numeric_limits<float>::infinity();
+        for (size_t i = 0; i < node->routingEntries.size(); ++i)
+        {
+            const RoutingEntry& entry = node->routingEntries[i];
+            const float d =distance(query, getVector(entry.pivotID));
+
+            if (d < bestDist)
+            {
+                bestDist = d;
+                bestEntry = static_cast<int>(i);
+            }
+        }
+        if (bestEntry < 0)
+        {
+            return -1;
+        }
+        node = node->routingEntries[bestEntry].child;
+    }
+    if (node == nullptr)
+    {
+        return -1;
+    }
+    return node->centroidEntryPoint;
+}
+
 int MTree::getHeight() const
 {
     return calculateHeight(root);
@@ -431,4 +472,78 @@ int MTree::calculateHeight(const MTNode* node) const
         maxChildHeight = std::max(maxChildHeight, calculateHeight(entry.child));
     }
     return 1 + maxChildHeight;
+}
+
+std::vector<float> MTree::computeLeafCentroid(const MTNode* leaf) const
+{
+    std::vector<float> centroid(dim, 0.0f);
+    if (leaf == nullptr || leaf->objectEntries.empty())
+    {
+        return centroid;
+    }
+    for (const ObjectEntry& entry : leaf->objectEntries)
+    {
+        const float* vec = getVector(entry.vectorID);
+        if (vec == nullptr)
+        {
+            continue;
+        }
+        for (size_t d = 0; d < dim; ++d)
+        {
+            centroid[d] += vec[d];
+        }
+    }
+    float invCount =1.0f / static_cast<float>(leaf->objectEntries.size());
+    for (size_t d = 0; d < dim; ++d)
+    {
+        centroid[d] *= invCount;
+    }
+    return centroid;
+}
+int MTree::findNearestToCentroid(const MTNode* leaf,const std::vector<float>& centroid) const
+{
+    if (leaf == nullptr || leaf->objectEntries.empty())
+    {
+        return -1;
+    }
+    int nearestID = -1;
+    float minDist = std::numeric_limits<float>::infinity();
+    for (const ObjectEntry& entry : leaf->objectEntries)
+    {
+        const float* vec = getVector(entry.vectorID);
+        if (vec == nullptr)
+        {
+            continue;
+        }
+        float dist = distance(centroid.data(),vec);
+        if (dist < minDist)
+        {
+            minDist = dist;
+            nearestID = entry.vectorID;
+        }
+    }
+    return nearestID;
+}
+void MTree::preprocessLeafEntryPoints(MTNode* node)
+{
+    if (node == nullptr)
+    {
+        return;
+    }
+    // Leaf node
+    if (node->isLeaf)
+    {
+        if (!node->objectEntries.empty())
+        {
+            std::vector<float> centroid =
+                computeLeafCentroid(node);
+            node->centroidEntryPoint =findNearestToCentroid(node,centroid);
+        }
+        return;
+    }
+    // Internal node: recursively process all children.
+    for (RoutingEntry& entry : node->routingEntries)
+    {
+        preprocessLeafEntryPoints(entry.child);
+    }
 }

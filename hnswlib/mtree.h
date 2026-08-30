@@ -25,6 +25,8 @@ class MTNode
     std::vector<RoutingEntry> routingEntries;
     std::vector<ObjectEntry> objectEntries;
 
+    int centroidEntryPoint = -1;
+
     MTNode() = default;
     MTNode(const MTNode&) = delete;
     MTNode& operator=(const MTNode&) = delete;
@@ -47,6 +49,7 @@ class MTree
         void insert(int vectorID);
 
         int greedySearch(const float* query) const;
+        int searchEntryPoint(const float* query) const;
         int getHeight() const;
 
         MTNode* root = nullptr;
@@ -80,6 +83,9 @@ class MTree
         std::vector<int> collectRoutingIds(const MTNode* node) const;
         std::pair<int, int> selectPromoters(const std::vector<int>& ids) const;
         int assignToPromoter(int id, const std::vector<int>& promoters) const;
+        std::vector<float> computeLeafCentroid(const MTNode* leaf) const;
+        int findNearestToCentroid(const MTNode* leaf,const std::vector<float>& centroid) const;
+        void preprocessLeafEntryPoints(MTNode* node);
 };
 
 

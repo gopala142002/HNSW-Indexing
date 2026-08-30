@@ -16,7 +16,7 @@ struct VTNode
     std::vector<int> vectorIndices;
     std::vector<Branch> branches;
     VTNode* parent = nullptr;
-
+    int centroidEntryPoint = -1;
     VTNode() = default;
     VTNode(const VTNode&) = delete;
     VTNode& operator=(const VTNode&) = delete;
@@ -37,6 +37,7 @@ class VoronoiTree
     void build();
 
     std::vector<int> searchNN(const float* query) const;
+    int searchEntryPoint(const float* query) const;
     int getHeight() const;
 
     VTNode* root = nullptr;
@@ -59,5 +60,9 @@ class VoronoiTree
 
     void choosePivots(const std::vector<int>& indices,std::vector<int>& pivots,std::vector<float>& distanceMatrix) const;
     void partition(const std::vector<int>& indices,const std::vector<int>& pivots,const std::vector<float>& distanceMatrix,std::vector<std::vector<int>>& clusters,std::vector<float>& radii) const;
+
+    std::vector<float> computeLeafCentroid(const VTNode* leaf) const;
+    int findNearestToCentroid(const VTNode* leaf,const std::vector<float>& centroid) const;
+    void preprocessLeafEntryPoints(VTNode* node);
 };
 

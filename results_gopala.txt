@@ -127,4 +127,17 @@ for gist :-
         speedup :- 1.07
 
 
+
+
 vttree for 2 pivots
+- have to check disk space and memory space for all 
+- Mix and match
+- PC Tree with different parametered instead of 2 - done
+- K - Means Tree - done
+- take the mean pivot of that leaf (try for all the trees) - done
+- level0 search with multiple entry points
+
+
+
+Dibyansh 
+- mrr, arr calculation for hd dataset

@@ -1,0 +1,127 @@
+for sift1M :- 
+    vtree :- 
+        Recall HNSW :- 0.9086
+        Recall vtree :- 0.9087
+        hnsw tree built time :- 476.3 s
+        vtree built time :- 7.5503 s
+        hnsw levels :- 5
+        vtree height :- 24
+        avg latency hnsw :- 176.1 us
+        avg latency vtree :- 96.6 us
+        speedup :- 1.82
+    pctree
+        Recall HNSW :- 0.9086
+        Recall pctree :- 0.9085
+        hnsw tree built time :- 474.9s
+        pctree built time :- 57.27s
+        hnsw levels :- 5
+        pctree height :- 14
+        avg latency hnsw :- 176.4 us
+        avg latency pctree :- 78.6 us
+        speedup :- 2.24
+    mtree
+        Recall HNSW :- 0.9086
+        Recall mtree :- 0.9089
+        hnsw tree built time :- 480.8 s
+        mtree built time :- 7.40s
+        hnsw levels :- 5
+        mtree height :- 8
+        avg latency hnsw :- 175.8 us
+        avg latency mtree :- 72.7 us
+        speedup :- 2.42
+    vpttree
+        Recall HNSW :- 0.9086
+        Recall vpttree :- 0.9086
+        hnsw tree built time :- 476.7 s
+        vpttree built time :- 2.3887 s
+        hnsw levels :- 5
+        vpttree height :- 14
+        avg latency hnsw :- 175.4
+        avg latency vpttree :- 82.5
+        speedup :- 2.13
+
+for glove :- 
+    vtree :- 
+        Recall HNSW :- 0.5279
+        Recall vtree :- 0.5299
+        hnsw tree built time :- 705.4 s 
+        vtree built time :-1289.7344
+        hnsw levels :- 5
+        vtree height :- 1508
+        avg latency hnsw :-208.9
+        avg latency vtree :- 1968.8
+        speedup :- 0.11
+    pctree
+        Recall HNSW :- 0.5279
+        Recall pctree :- 0.5291
+        hnsw tree built time :- 709.7 s
+        pctree built time :- 162.25
+        hnsw levels :- 5
+        pctree height :- 15
+        avg latency hnsw :- 17.4 
+        avg latency pctree :- 125.4
+        speedup :- 1.40
+    mtree
+        Recall HNSW :- 0.5279
+        Recall mtree :- 0.5308
+        hnsw tree built time :- 710.9 s
+        mtree built time :- 29.57 s
+        hnsw levels :- 5
+        mtree height :- 11
+        avg latency hnsw :- 277.6 us
+        avg latency mtree :- 139.3 us
+        speedup :- 1.27x
+    vpttree
+        Recall HNSW :- 0.5279
+        Recall vpttree :- 0.5355
+        hnsw tree built time :- 706.3 s
+        vpttree built time :- 5.6111 s
+        hnsw levels :- 5
+        vpttree height :- 15
+        avg latency hnsw :- 176.9
+        avg latency vpttree :- 142.9
+        speedup :- 1.24
+
+    
+for gist :- 
+    vtree :- 
+        Recall HNSW :- 0.6579
+        Recall vtree :- 0.6573
+        hnsw tree built time :- 2002.0 s
+        vtree built time :- 853.7588
+        hnsw levels :- 5
+        vtree height :- 331
+        avg latency hnsw :- 636.2
+        avg latency vtree :- 2119.4
+        speedup :- 0.30
+    pctree
+        Recall HNSW :- 0.6579
+        Recall pctree :- 0.6582
+        hnsw tree built time :- 2005.0 s
+        pctree built time :- 348.31 s
+        hnsw levels :- 5
+        pctree height :- 15
+        avg latency hnsw :- 632.9
+        avg latency pctree :- 397.2
+        speedup :- 1.59
+    mtree
+        Recall HNSW :- .6579
+        Recall mtree :- .6563
+        hnsw tree built time :- 2001.1 s
+        mtree built time :- 74.99
+        hnsw levels :- 5
+        mtree height :- 9
+        avg latency hnsw :- 630.1
+        avg latency mtree :- 415.7
+        speedup :- 1.52
+
+    vpttree
+        Recall HNSW :- 0.6579
+        Recall vpttree :- 0.6570
+        hnsw tree built time :- 1996.9 s
+        vpttree built time :- 12.4702 s
+        hnsw levels :- 5
+        vpttree height :- 14
+        avg latency hnsw :- 621.6
+        avg latency vpttree :- 428.0
+        speedup :- 1.45
