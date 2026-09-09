@@ -131,13 +131,23 @@ for gist :-
 
 vttree for 2 pivots
 - have to check disk space and memory space for all 
-- Mix and match
 - PC Tree with different parametered instead of 2 - done
 - K - Means Tree - done
 - take the mean pivot of that leaf (try for all the trees) - done
+
+
+
+
+Current week
+- Plots in QPS
+- Mix and match
 - level0 search with multiple entry points
-
-
+- have to do profiling
 
 Dibyansh 
-- mrr, arr calculation for hd dataset
+- calculate skyline and then run the implementation on it 
+- run same datset for different set of utility functions
+- test on multiple dataset
+- store results in csv file
+- try to prove it np-hard using the paper of abolfazl
+
