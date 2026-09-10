@@ -7,7 +7,7 @@
 #include <stdexcept>
 
 
-KMeansTree::KMeansTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t num_vectors,int numClusters,int leafCapacity)
+KMeansTree::KMeansTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t num_vectors,int numClusters,int leafCapacity,int leafClusters)
 {
     this->data_level0_memory = data_level0_memory;
     this->data_size = data_size;
@@ -15,7 +15,7 @@ KMeansTree::KMeansTree(const char* data_level0_memory,size_t data_size,size_t di
     this->num_vectors = num_vectors;
     this->numClusters = numClusters;
     this->leafCapacity = leafCapacity;
-
+    this->leafClusters = leafClusters;
     if (data_level0_memory == nullptr)
     {
         throw std::invalid_argument("KMeansTree: data_level0_memory must not be null");
@@ -27,6 +27,10 @@ KMeansTree::KMeansTree(const char* data_level0_memory,size_t data_size,size_t di
     if (numClusters < 2)
     {
         throw std::invalid_argument("KMeansTree: numClusters must be >= 2");
+    }
+    if (leafClusters < 1)
+    {
+        throw std::invalid_argument("KMeansTree: leafClusters must be >= 1");
     }
     if (leafCapacity < 1)
     {
@@ -104,10 +108,10 @@ int KMeansTree::findNearestCentroid(const float* vector,const std::vector<std::v
 }
 
 
-void KMeansTree::initializeCentroids(const std::vector<int>& vectorIndices,std::vector<std::vector<float>>& centroids) const
+void KMeansTree::initializeCentroids(const std::vector<int>& vectorIndices,int k,std::vector<std::vector<float>>& centroids) const
 {
     const int n =static_cast<int>(vectorIndices.size());
-    const int k =std::min(numClusters, n);
+    k =std::min(k, n);
     centroids.clear();
     centroids.resize(k,std::vector<float>(dim, 0.0f));
 
@@ -130,9 +134,7 @@ void KMeansTree::initializeCentroids(const std::vector<int>& vectorIndices,std::
 void KMeansTree::runKMeans(const std::vector<int>& vectorIndices,std::vector<std::vector<float>>& centroids,std::vector<std::vector<int>>& clusters) const
 {
     const int k =static_cast<int>(centroids.size());
-
     const int n =static_cast<int>(vectorIndices.size());
-
     if (k == 0 || n == 0)
     {
         clusters.clear();
@@ -257,6 +259,51 @@ int KMeansTree::findNearestToPoint(const std::vector<float>& point,const std::ve
 }
 
 
+void KMeansTree::populateLeaf(KMeansNode* node) const
+{
+    //Approach 1: single leaf centroid / representative
+    std::vector<float> centroid(dim, 0.0f);
+    if (!node->vectorIndices.empty())
+    {
+        for (int vectorID : node->vectorIndices)
+        {
+            const float* vec = getVector(vectorID);
+            for (size_t d = 0; d < dim; ++d)
+            {
+                centroid[d] += vec[d];
+            }
+        }
+        float invCount = 1.0f / static_cast<float>(node->vectorIndices.size());
+        for (size_t d = 0; d < dim; ++d)
+        {
+            centroid[d] *= invCount;
+        }
+    }
+    node->leafCentroid = centroid;
+    node->representative = findNearestToPoint(centroid, node->vectorIndices);
+
+    //Approach 2: leaf-level K-Means for multiple HNSW entry points 
+    std::vector<std::vector<float>> leafCentroids;
+    std::vector<std::vector<int>> leafClusterAssignments;
+
+    initializeCentroids(node->vectorIndices, this->leafClusters, leafCentroids);
+    runKMeans(node->vectorIndices, leafCentroids, leafClusterAssignments);
+
+    node->leafClusterCentroids = std::move(leafCentroids);
+
+    node->leafClusterRepresentatives.clear();
+    node->leafClusterRepresentatives.reserve(node->leafClusterCentroids.size());
+    for (size_t c = 0; c < node->leafClusterCentroids.size(); ++c)
+    {
+        int representative = findNearestToPoint(
+            node->leafClusterCentroids[c],
+            leafClusterAssignments[c]
+        );
+        node->leafClusterRepresentatives.push_back(representative);
+    }
+}
+
+
 KMeansNode* KMeansTree::buildRecursive(std::vector<int>&& vectorIndices)
 {
     KMeansNode* node =new KMeansNode();
@@ -265,30 +312,13 @@ KMeansNode* KMeansTree::buildRecursive(std::vector<int>&& vectorIndices)
     {
         node->isLeaf = true;
         node->vectorIndices =std::move(vectorIndices);
-        std::vector<float> centroid(dim,0.0f);
-        if (!node->vectorIndices.empty())
-        {
-            for (int vectorID :node->vectorIndices)
-            {
-                const float* vec =getVector(vectorID);
-                for (size_t d = 0; d < dim; ++d)
-                {
-                    centroid[d] += vec[d];
-                }
-            }
-            float invCount =1.0f /static_cast<float>(node->vectorIndices.size());
-            for (size_t d = 0; d < dim; ++d)
-            {
-                centroid[d] *= invCount;
-            }
-        }
-        node->representative =findNearestToPoint(centroid,node->vectorIndices);
+        populateLeaf(node);
         return node;
     }
 
     std::vector<std::vector<float>> centroids;
 
-    initializeCentroids(vectorIndices,centroids);
+    initializeCentroids(vectorIndices,numClusters,centroids);
     std::vector<std::vector<int>> clusters;
     runKMeans(vectorIndices,centroids,clusters);
 
@@ -305,24 +335,7 @@ KMeansNode* KMeansTree::buildRecursive(std::vector<int>&& vectorIndices)
     {
         node->isLeaf = true;
         node->vectorIndices =std::move(vectorIndices);
-        std::vector<float> centroid(dim,0.0f);
-        for (int vectorID:node->vectorIndices)
-        {
-            const float* vec =getVector(vectorID);
-            for (size_t d = 0; d < dim; ++d)
-            {
-                centroid[d] += vec[d];
-            }
-        }
-        if (!node->vectorIndices.empty())
-        {
-            float invCount =1.0f /static_cast<float>(node->vectorIndices.size());
-            for (size_t d = 0; d < dim; ++d)
-            {
-                centroid[d] *= invCount;
-            }
-        }
-        node->representative =findNearestToPoint(centroid,node->vectorIndices);
+        populateLeaf(node);
         return node;
     }
     node->isLeaf = false;
@@ -342,27 +355,40 @@ KMeansNode* KMeansTree::buildRecursive(std::vector<int>&& vectorIndices)
     return node;
 }
 
-int KMeansTree::searchNN(const float* query) const
+
+KMeansNode* KMeansTree::findLeaf(const float* query) const
 {
     if (root == nullptr || query == nullptr)
     {
-        return -1;
+        return nullptr;
     }
     KMeansNode* current = root;
-    while (current != nullptr)
+    while (current != nullptr && !current->isLeaf)
     {
-        if (current->isLeaf)
+        int nearestChild = findNearestCentroid(query, current->centroids);
+        if (nearestChild < 0 || nearestChild >= static_cast<int>(current->children.size()))
         {
-            return current->representative;
-        }
-        int nearestChild =findNearestCentroid(query, current->centroids);
-        if (nearestChild < 0 ||nearestChild >= static_cast<int>(current->children.size()))
-        {
-            return -1;
+            return nullptr;
         }
         current = current->children[nearestChild];
     }
-    return -1;
+    return current;
+}
+
+int KMeansTree::searchNN(const float* query) const
+{
+    KMeansNode* leaf = findLeaf(query);
+    return leaf ? leaf->representative : -1;
+}
+
+std::vector<int> KMeansTree::searchNNMulti(const float* query) const
+{
+    KMeansNode* leaf = findLeaf(query);
+    if (leaf == nullptr)
+    {
+        return {};
+    }
+    return leaf->leafClusterRepresentatives;
 }
 
 int KMeansTree::calculateHeight(KMeansNode* node) const

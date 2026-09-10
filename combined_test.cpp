@@ -104,7 +104,7 @@ std::vector<size_t> extract_ids(std::priority_queue<std::pair<float, hnswlib::la
 
 int main(int argc, char** argv) 
 {
-    const std::string data_dir =(argc > 1)? argv[1]: "./datasets/glove";
+    const std::string data_dir =(argc > 1)? argv[1]: "./datasets/sift";
     const std::string base_path =data_dir + "/base.fvecs";
     const std::string query_path =data_dir + "/query.fvecs";
     const std::string gt_path =data_dir + "/groundtruth.ivecs";
@@ -124,6 +124,7 @@ int main(int argc, char** argv)
     const int pctree_partitions = 4;
     const int mtree_pivots=5;
     const int kmeans_clusters = 4;
+    const int kmeans_leaf_clusters = 3;
 
 
 
@@ -223,7 +224,7 @@ int main(int argc, char** argv)
     // Building KMeansTree
     std::cout << "\nBuilding KMeansTree "<< "(K=" << kmeans_clusters<< ", leafCapacity=" << leaf_capacity << ")...\n";
     auto t_kmeans_start = std::chrono::high_resolution_clock::now();
-    hnsw.buildKMeansTree(kmeans_clusters, leaf_capacity);
+    hnsw.buildKMeansTree(kmeans_clusters, leaf_capacity,kmeans_leaf_clusters);
     auto t_kmeans_end = std::chrono::high_resolution_clock::now();
     double kmeans_build_sec =std::chrono::duration<double>(t_kmeans_end - t_kmeans_start).count();
     std::cout << "KMeansTree built in "<< std::fixed << std::setprecision(2)<< kmeans_build_sec << " s.\n";
@@ -276,6 +277,11 @@ int main(int argc, char** argv)
     double total_recall_kmeans = 0.0;
     double total_recall_kmeans_finger = 0.0;
     double total_recall_kmeans_tri = 0.0;
+    double total_recall_kmeans_multi = 0.0;
+    double total_recall_kmeans_finger_multi = 0.0;
+    double total_recall_kmeans_tri_multi = 0.0;
+
+
 
     // Accumulate nanoseconds as double so sub-microsecond measurements are not
     // truncated to zero before averaging.
@@ -297,6 +303,9 @@ int main(int argc, char** argv)
     double time_kmeans_ns = 0.0;
     double time_kmeans_finger_ns = 0.0;
     double time_kmeans_tri_ns = 0.0;
+    double time_kmeans_multi_ns = 0.0;
+    double time_kmeans_finger_multi_ns = 0.0;
+    double time_kmeans_tri_multi_ns = 0.0;
 
 
 
@@ -454,7 +463,7 @@ int main(int argc, char** argv)
         total_recall_kmeans +=recall_at_k(gt_q,gt_dim,kmeans_ids,k);
 
 
-        // KMeansTree -> TRI
+        // KMeansTree -> TRI HNSW
         start = std::chrono::high_resolution_clock::now();
         auto pq_kmeans_tri =hnsw.searchKnnKMeansTreeTri(query,static_cast<size_t>(k));
         end = std::chrono::high_resolution_clock::now();
@@ -463,13 +472,40 @@ int main(int argc, char** argv)
         total_recall_kmeans_tri +=recall_at_k(gt_q,gt_dim,kmeans_tri_ids,k);
 
 
-        // KMeansTree -> (level-0 + finer optimization)
+        // KMeansTree -> finger HNSW
         start = std::chrono::high_resolution_clock::now();
         auto pq_kmeans_finger =hnsw.searchKnnKMeansTreeFinger(query,static_cast<size_t>(k));
         end = std::chrono::high_resolution_clock::now();
         time_kmeans_finger_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_finger_ids =extract_ids(pq_kmeans_finger, k);
         total_recall_kmeans_finger +=recall_at_k(gt_q,gt_dim,kmeans_finger_ids,k);
+
+
+        // KMeansTree -> HNSW Multi
+        start = std::chrono::high_resolution_clock::now();
+        auto pq_kmeans_multi =hnsw.searchKnnKMeansTreeMulti(query, static_cast<size_t>(k));
+        end = std::chrono::high_resolution_clock::now();
+        time_kmeans_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
+        auto kmeans_multi_ids = extract_ids(pq_kmeans_multi, k);
+        total_recall_kmeans_multi +=recall_at_k(gt_q, gt_dim, kmeans_multi_ids, k);
+
+        // KMeansTree -> TRI HNSW Multi
+        start = std::chrono::high_resolution_clock::now();
+        auto pq_kmeans_tri_multi =hnsw.searchKnnKMeansTreeTriMulti(query, static_cast<size_t>(k));
+        end = std::chrono::high_resolution_clock::now();
+        time_kmeans_tri_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
+        auto kmeans_tri_multi_ids = extract_ids(pq_kmeans_tri_multi, k);
+        total_recall_kmeans_tri_multi +=recall_at_k(gt_q, gt_dim, kmeans_tri_multi_ids, k);
+
+
+        // KMeansTree -> FINGER HNSW Multi
+        start = std::chrono::high_resolution_clock::now();
+        auto pq_kmeans_finger_multi =hnsw.searchKnnKMeansTreeFingerMulti(query, static_cast<size_t>(k));
+        end = std::chrono::high_resolution_clock::now();
+        time_kmeans_finger_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
+        auto kmeans_finger_multi_ids =extract_ids(pq_kmeans_finger_multi, k);
+        total_recall_kmeans_finger_multi +=recall_at_k(gt_q, gt_dim, kmeans_finger_multi_ids, k);
+
 
         if ((q + 1) % 1000 == 0) 
         {
@@ -495,6 +531,11 @@ int main(int argc, char** argv)
     const double avg_recall_kmeans =total_recall_kmeans / Q;
     const double avg_recall_kmeans_finger =total_recall_kmeans_finger / Q;
     const double avg_recall_kmeans_tri =total_recall_kmeans_tri / Q;
+    const double avg_recall_kmeans_multi = total_recall_kmeans_multi / Q;
+    const double avg_recall_kmeans_finger_multi =total_recall_kmeans_finger_multi / Q;
+    const double avg_recall_kmeans_tri_multi = total_recall_kmeans_tri_multi / Q;
+
+
 
     const double avg_time_hnsw_us = (time_hnsw_ns / Q) / 1000.0;
     const double avg_time_hnsw_finger_us = (time_hnsw_finger_ns / Q) / 1000.0;
@@ -514,6 +555,11 @@ int main(int argc, char** argv)
     const double avg_time_kmeans_us =(time_kmeans_ns / Q) / 1000.0;
     const double avg_time_kmeans_finger_us =(time_kmeans_finger_ns / Q) / 1000.0;
     const double avg_time_kmeans_tri_us =(time_kmeans_tri_ns / Q) / 1000.0;
+    const double avg_time_kmeans_multi_us = (time_kmeans_multi_ns / Q) / 1000.0;
+    const double avg_time_kmeans_finger_multi_us = (time_kmeans_finger_multi_ns / Q) / 1000.0;
+    const double avg_time_kmeans_tri_multi_us = (time_kmeans_tri_multi_ns / Q) / 1000.0;
+
+
 
     const double speedup_pctree = avg_time_hnsw_us / avg_time_pctree_us;
     const double speedup_hnsw_finger = avg_time_hnsw_us / avg_time_hnsw_finger_us;
@@ -532,6 +578,9 @@ int main(int argc, char** argv)
     const double speedup_kmeans =avg_time_hnsw_us / avg_time_kmeans_us;
     const double speedup_kmeans_finger =avg_time_hnsw_us / avg_time_kmeans_finger_us;
     const double speedup_kmeans_tri =avg_time_hnsw_us / avg_time_kmeans_tri_us;
+    const double speedup_kmeans_multi =avg_time_hnsw_us / avg_time_kmeans_multi_us;
+    const double speedup_kmeans_finger_multi =avg_time_hnsw_us / avg_time_kmeans_finger_multi_us;
+    const double speedup_kmeans_tri_multi = avg_time_hnsw_us / avg_time_kmeans_tri_multi_us;
 
     std::cout << "\nSIFT1M RESULTS\n";
     std::cout << "N=" << N << ", dim=" << dim<< ", k=" << k << ", ef=" << ef_search<< ", queries=" << Q << "\n\n";
@@ -567,6 +616,9 @@ int main(int argc, char** argv)
     print_result("KMeansTree -> HNSW",avg_recall_kmeans,avg_time_kmeans_us,speedup_kmeans);
     print_result("KMeansTree -> TRI",avg_recall_kmeans_tri,avg_time_kmeans_tri_us,speedup_kmeans_tri);
     print_result("KMeansTree -> FINGER",avg_recall_kmeans_finger,avg_time_kmeans_finger_us,speedup_kmeans_finger);
+    print_result("KMeansTree -> HNSW Multi",avg_recall_kmeans_multi,avg_time_kmeans_multi_us,speedup_kmeans_multi);
+    print_result("KMeansTree -> TRI Multi",avg_recall_kmeans_tri_multi,avg_time_kmeans_tri_multi_us,speedup_kmeans_tri_multi);
+    print_result("KMeansTree -> FINGER Multi",avg_recall_kmeans_finger_multi,avg_time_kmeans_finger_multi_us,speedup_kmeans_finger_multi);
 
 
     // One summary row per search method. This file is overwritten on every run.
@@ -577,18 +629,21 @@ int main(int argc, char** argv)
         throw std::runtime_error("Cannot open " + csv_path + " for writing");
     }
 
+
     csv << "method,N,dim,k,ef_search,num_queries,M,ef_construction,"
     << "leaf_capacity,finger_rank,finger_warmup,"
-    << "pctree_partitions,mtree_pivots,vt_pivots,kmeans_clusters,"
+    << "pctree_partitions,mtree_pivots,vt_pivots,"
+    << "kmeans_clusters,kmeans_leaf_clusters,"
     << "hnsw_num_levels,pctree_height,mtree_height,vptree_height,"
     // << "vtree_height,
-    <<"kmeans_height,"
+    << "kmeans_height,"
     << "hnsw_build_sec,pctree_build_sec,mtree_build_sec,"
     << "vptree_build_sec,"
     // <<"vtree_build_sec,"
-    <<"kmeans_build_sec,"
+    << "kmeans_build_sec,"
     << "finger_build_sec,tri_build_sec,recall_at_k,avg_latency_us,"
     << "speedup_vs_hnsw,recall_loss_vs_hnsw\n";
+
 
 
     auto write_row = [&](const std::string& method,double recall,double latency_us,double speedup)
@@ -609,6 +664,7 @@ int main(int argc, char** argv)
             << mtree_pivots << ','
             // << vt_pivots << ','
             << kmeans_clusters << ','
+            << kmeans_leaf_clusters<<','
             << hnsw_num_levels << ','
             << pctree_height << ','
             << mtree_height << ','
@@ -654,6 +710,9 @@ int main(int argc, char** argv)
     write_row("KMeansTree -> HNSW",avg_recall_kmeans,avg_time_kmeans_us,speedup_kmeans);
     write_row("KMeansTree -> TRI",avg_recall_kmeans_tri,avg_time_kmeans_tri_us,speedup_kmeans_tri);
     write_row("KMeansTree -> FINGER",avg_recall_kmeans_finger,avg_time_kmeans_finger_us,speedup_kmeans_finger);
+    write_row("KMeansTree -> HNSW Multi",avg_recall_kmeans_multi,avg_time_kmeans_multi_us,speedup_kmeans_multi);
+    write_row("KMeansTree -> TRI Multi",avg_recall_kmeans_tri_multi,avg_time_kmeans_tri_multi_us,speedup_kmeans_tri_multi);
+    write_row("KMeansTree -> FINGER Multi",avg_recall_kmeans_finger_multi,avg_time_kmeans_finger_multi_us,speedup_kmeans_finger_multi);
 
     csv.close();
 

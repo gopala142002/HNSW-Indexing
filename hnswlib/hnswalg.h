@@ -166,7 +166,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 Dres(i, static_cast<Eigen::Index>(j)) = samples[j * dim + i];
 
 
-                
+
         samples.clear();
         samples.shrink_to_fit();
 
@@ -478,12 +478,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         vpt_->build();
     }
 
-    void buildKMeansTree(int numClusters, int leafCapacity)
+    void buildKMeansTree(int numClusters, int leafCapacity,int leafClusters)
     {
         delete kmeanstree_;
-
-        kmeanstree_ = new KMeansTree(data_level0_memory_,size_data_per_element_,data_size_ / sizeof(float),cur_element_count,numClusters,leafCapacity);
-
+        kmeanstree_ = new KMeansTree(data_level0_memory_,size_data_per_element_,data_size_ / sizeof(float),cur_element_count,numClusters,leafCapacity,leafClusters);
         kmeanstree_->build();
     }
 
@@ -714,6 +712,9 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return top_candidates;
     }
 
+
+
+    // Level 0 single entry point
     template <bool bare_bone_search = true, bool collect_metrics = false>priority_queue<pair<dist_t, tableint>, vector<pair<dist_t, tableint>>, CompareByFirst> searchBaseLayerST(tableint ep_id,const void *data_point,size_t ef,BaseFilterFunctor* isIdAllowed = nullptr,BaseSearchStopCondition<dist_t>* stop_condition = nullptr) const 
     {
         VisitedList *vl = visited_list_pool_->getFreeVisitedList();
@@ -849,6 +850,137 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         visited_list_pool_->releaseVisitedList(vl);
         return top_candidates;
     }
+
+
+    // level 0 multiple entry point
+    template <bool bare_bone_search = true>priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> searchBaseLayerSTMulti(const std::vector<tableint>& ep_ids,const void *data_point,size_t ef,BaseFilterFunctor* isIdAllowed = nullptr,BaseSearchStopCondition<dist_t>* stop_condition = nullptr) const
+    {   
+        VisitedList *vl = visited_list_pool_->getFreeVisitedList();
+        vl_type *visited_array = vl->mass;
+        vl_type visited_array_tag = vl->curV;
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> candidate_set;
+
+       
+        for (tableint ep_id : ep_ids)
+        {
+            if (ep_id >= cur_element_count)
+                continue;
+            if (visited_array[ep_id] == visited_array_tag)
+                continue;
+            visited_array[ep_id] = visited_array_tag;
+            char* ep_data = getDataByInternalId(ep_id);
+            dist_t dist = fstdistfunc_(data_point,ep_data,dist_func_param_);
+            candidate_set.emplace(-dist, ep_id);
+            if (bare_bone_search || (!isMarkedDeleted(ep_id) && ((!isIdAllowed) || (*isIdAllowed)(getExternalLabel(ep_id)))))
+            {
+                top_candidates.emplace(dist, ep_id);
+                if (!bare_bone_search && stop_condition)
+                {
+                    stop_condition->add_point_to_result(getExternalLabel(ep_id),ep_data,dist
+                    );
+                }
+            }
+        }
+        while (top_candidates.size() > ef)
+        {
+            top_candidates.pop();
+        }
+        dist_t lowerBound =top_candidates.empty()? numeric_limits<dist_t>::max(): top_candidates.top().first;
+        while (!candidate_set.empty())
+        {
+            pair<dist_t, tableint> current_node_pair =
+                candidate_set.top();
+            dist_t candidate_dist = -current_node_pair.first;
+            bool flag_stop_search;
+            if (bare_bone_search)
+            {
+                flag_stop_search = candidate_dist > lowerBound;
+            }
+            else
+            {
+                if (stop_condition)
+                {
+                    flag_stop_search =stop_condition->should_stop_search(candidate_dist,lowerBound);
+                }
+                else
+                {
+                    flag_stop_search =candidate_dist > lowerBound &&top_candidates.size() == ef;
+                }
+            }
+
+            if (flag_stop_search)
+            {
+                break;
+            }
+            candidate_set.pop();
+            tableint current_node_id =current_node_pair.second;
+
+            int *data =(int *)get_linklist0(current_node_id);
+
+            size_t size =getListCount((linklistsizeint*)data);
+
+            for (size_t j = 1; j <= size; j++)
+            {
+                int candidate_id = *(data + j);
+                if (visited_array[candidate_id] == visited_array_tag)
+                    continue;
+                visited_array[candidate_id] = visited_array_tag;
+                char *currObj1 =getDataByInternalId(candidate_id);
+                dist_t dist =fstdistfunc_(data_point,currObj1,dist_func_param_);
+                bool flag_consider_candidate;
+                if (!bare_bone_search && stop_condition)
+                {
+                    flag_consider_candidate =stop_condition->should_consider_candidate(dist,lowerBound);
+                }
+                else
+                {
+                    flag_consider_candidate =top_candidates.size() < ef ||lowerBound > dist;
+                }
+
+                if (flag_consider_candidate)
+                {
+                    candidate_set.emplace(-dist,candidate_id);
+                    if (bare_bone_search || (!isMarkedDeleted(candidate_id) && ((!isIdAllowed) ||(*isIdAllowed)(getExternalLabel(candidate_id)))))
+                    {
+                        top_candidates.emplace(dist,candidate_id);
+                        if (!bare_bone_search && stop_condition)
+                        {
+                            stop_condition->add_point_to_result(getExternalLabel(candidate_id),currObj1,dist);
+                        }
+                    }
+                    bool flag_remove_extra = false;
+                    if (!bare_bone_search && stop_condition)
+                    {
+                        flag_remove_extra =stop_condition->should_remove_extra();
+                    }
+                    else
+                    {
+                        flag_remove_extra =top_candidates.size() > ef;
+                    }
+                    while (flag_remove_extra)
+                    {
+                        tableint id =top_candidates.top().second;
+                        top_candidates.pop();
+                        if (!bare_bone_search && stop_condition)
+                        {
+                            stop_condition->remove_point_from_result(getExternalLabel(id),getDataByInternalId(id),dist);
+                            flag_remove_extra =stop_condition->should_remove_extra();
+                        }
+                        else
+                        {
+                            flag_remove_extra =top_candidates.size() > ef;
+                        }
+                    }
+                    if (!top_candidates.empty())
+                        lowerBound =top_candidates.top().first;
+                }
+            }
+        }
+        visited_list_pool_->releaseVisitedList(vl);
+        return top_candidates;
+    }
+
 
     // FINGER-ACCELERATED BASE LAYER SEARCH METHOD
     priority_queue<pair<dist_t, tableint>, vector<pair<dist_t, tableint>>, CompareByFirst>searchBaseLayerFinger(tableint ep_id,const void *query_data,size_t ef,BaseFilterFunctor* isIdAllowed = nullptr) const 
@@ -1889,6 +2021,164 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
 
+    // FINGER search with multiple entry points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchFromEntryPointFingerMulti(const std::vector<tableint>& entry_points,const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> result;
+        if (cur_element_count == 0 || entry_points.empty())
+            return result;
+
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
+
+        // If FINGER is not available, use normal multi-entry search.
+        if (!use_finger_ || !finger_global_.ready)
+        {
+            bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+            if (bare_bone_search)
+            {
+                top_candidates = searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),isIdAllowed);
+            }
+            else
+            {
+                top_candidates =searchBaseLayerSTMulti<false>(entry_points,query_data,max(ef_, k),isIdAllowed);
+            }
+        }
+        else
+        {
+            //  Multi-entry FINGER Level-0 search.
+            // All entry points are inserted into the same candidate
+            // queues and searched together.
+            VisitedList* vl = visited_list_pool_->getFreeVisitedList();
+            vl_type* visited_array = vl->mass;
+            vl_type visited_array_tag = vl->curV;
+
+            priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> candidate_set;
+
+            const int dim =static_cast<int>(data_size_ / sizeof(float));
+
+            const float* query = reinterpret_cast<const float*>(query_data);
+
+            const float query_norm_sq = finger_norm_sq(query, dim);
+
+            std::vector<float> query_projection(finger_rank_);
+
+            finger_project(query,finger_global_.projection.data(),dim,finger_rank_,query_projection.data());
+
+            dist_t lowerBound =numeric_limits<dist_t>::max();
+            for (tableint ep_id : entry_points)
+            {
+                if (ep_id >= cur_element_count)
+                    continue;
+
+                if (visited_array[ep_id] == visited_array_tag)
+                    continue;
+
+                visited_array[ep_id] = visited_array_tag;
+
+                dist_t dist =fstdistfunc_(query_data,getDataByInternalId(ep_id),dist_func_param_);
+                candidate_set.emplace(-dist, ep_id);
+                if (!isMarkedDeleted(ep_id) && (!isIdAllowed ||(*isIdAllowed)(getExternalLabel(ep_id))))
+                {
+                    top_candidates.emplace(dist, ep_id);
+                }
+            }
+
+            if (!top_candidates.empty())
+                lowerBound = top_candidates.top().first;
+
+            size_t updates = 0;
+
+            while (!candidate_set.empty())
+            {
+                pair<dist_t, tableint> current_node_pair = candidate_set.top();
+
+                dist_t candidate_dist = -current_node_pair.first;
+
+                if (candidate_dist > lowerBound && top_candidates.size() == max(ef_, k))
+                {
+                    break;
+                }
+
+                candidate_set.pop();
+                tableint curr_node  = current_node_pair.second;
+
+                ++updates;
+
+                int* data = (int*)get_linklist0(curr_node);
+
+                size_t size = getListCount((linklistsizeint*)data);
+
+                const float* center = reinterpret_cast<const float*>(getDataByInternalId(curr_node));
+
+                float center_norm_sq = finger_global_.point_norm_sq[curr_node];
+
+                const float* center_projection = &finger_global_.point_projection[static_cast<size_t>(curr_node) * finger_rank_];
+
+                float alpha = 0.0f;
+
+                if (center_norm_sq > 1e-20f)
+                {
+                    alpha =(query_norm_sq +center_norm_sq - static_cast<float>(candidate_dist))/ (2.0f * center_norm_sq);
+                }
+                const FingerNodeData& node = finger_data_[curr_node];
+                bool use_approx =updates > finger_warmup_updates_ && node.neighbor_coeffs.size() >= size * static_cast<size_t>(finger_rank_);
+
+                for (size_t j = 0; j < size; ++j)
+                {
+                    tableint cand_id = *(data + j + 1);
+
+                    if (visited_array[cand_id] == visited_array_tag)
+                    {
+                        continue;
+                    }
+
+                    visited_array[cand_id] = visited_array_tag;
+
+                    if (use_approx)
+                    {
+                        float est =finger_approx_distance(query_norm_sq,center_norm_sq,static_cast<float>(candidate_dist),query_projection.data(),center_projection,&node.neighbor_coeffs[j * static_cast<size_t>(finger_rank_)],node.residual_norms[j],node.neighbor_center_coeffs[j],finger_global_);
+
+                        if (top_candidates.size() >= max(ef_, k) &&
+                            static_cast<float>(lowerBound) < est)
+                        {
+                            continue;
+                        }
+                    }
+
+                    dist_t dist =fstdistfunc_(query_data,getDataByInternalId(cand_id),dist_func_param_);
+
+                    if (top_candidates.size() < max(ef_, k) || lowerBound > dist)
+                    {
+                        candidate_set.emplace(-dist, cand_id);
+                        if (!isMarkedDeleted(cand_id) &&(!isIdAllowed || (*isIdAllowed)(getExternalLabel(cand_id))))
+                        {
+                            top_candidates.emplace(dist,cand_id);
+                        }
+
+                        if (top_candidates.size() > max(ef_, k))
+                            top_candidates.pop();
+
+                        if (!top_candidates.empty())
+                            lowerBound = top_candidates.top().first;
+                    }
+                }
+            }
+
+            visited_list_pool_->releaseVisitedList(vl);
+        }
+
+        while (top_candidates.size() > k)
+            top_candidates.pop();
+
+        while (!top_candidates.empty())
+        {
+            pair<dist_t, tableint> rez = top_candidates.top();
+            result.push(pair<dist_t, labeltype>(rez.first,getExternalLabel(rez.second)));
+            top_candidates.pop();
+        }
+        return result;
+    }
+
 
     std::priority_queue<std::pair<dist_t, labeltype>>searchFromEntryPointTri(tableint entry_point,const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
     {
@@ -1914,6 +2204,103 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
         return result;
     }
+
+
+    // TRI search with multiple entry points
+    std::priority_queue<std::pair<dist_t, labeltype>> searchFromEntryPointTriMulti(const std::vector<tableint>& entry_points,const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> result;
+        if (cur_element_count == 0 || entry_points.empty())
+            return result;
+
+        if (!tri_ready_)
+        {
+            throw runtime_error("TRI search requested before buildTriDistances().");
+        }
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> candidate_set;
+        VisitedList* vl = visited_list_pool_->getFreeVisitedList();
+        vl_type* visited_array = vl->mass;
+        vl_type visited_array_tag = vl->curV;
+        const size_t ef_search = max(ef_, k);
+        for (tableint ep_id : entry_points)
+        {
+            if (ep_id >= cur_element_count)
+                continue;
+
+            if (visited_array[ep_id] == visited_array_tag)
+                continue;
+
+            visited_array[ep_id] = visited_array_tag;
+            dist_t dist = fstdistfunc_(query_data,getDataByInternalId(ep_id),dist_func_param_);
+            candidate_set.emplace(-dist, ep_id);
+            if (!isMarkedDeleted(ep_id) &&(!isIdAllowed || (*isIdAllowed)(getExternalLabel(ep_id))))
+            {
+                top_candidates.emplace(dist, ep_id);
+            }
+        }
+        dist_t lowerBound =top_candidates.empty()? numeric_limits<dist_t>::max(): top_candidates.top().first;
+        while (!candidate_set.empty())
+        {
+            pair<dist_t, tableint> current_node_pair =candidate_set.top();
+            dist_t candidate_dist =-current_node_pair.first;
+            if (candidate_dist > lowerBound && top_candidates.size() == ef_search)
+            {
+                break;
+            }
+            candidate_set.pop();
+            tableint curr_node = current_node_pair.second;
+            int* data = (int*)get_linklist0(curr_node);
+            size_t size = getListCount((linklistsizeint*)data);
+            dist_t d_qc = candidate_dist;
+
+            for (size_t j = 0; j < size; ++j)
+            {
+                tableint cand_id = *(data + j + 1);
+
+                if (visited_array[cand_id] == visited_array_tag)
+                {
+                    continue;
+                }
+                visited_array[cand_id] = visited_array_tag;
+                dist_t d_cc = tri_edge_distances_[static_cast<size_t>(curr_node) *maxM0_ + j];
+                dist_t tri_lb =std::fabs(d_qc - d_cc);
+
+                if (top_candidates.size() >= ef_search && tri_lb >= lowerBound)
+                {
+                    continue;
+                }
+
+                dist_t dist = fstdistfunc_(query_data,getDataByInternalId(cand_id),
+                        dist_func_param_);
+
+                if (top_candidates.size() < ef_search || lowerBound > dist)
+                {
+                    candidate_set.emplace(-dist,cand_id);
+                    if (!isMarkedDeleted(cand_id) && (!isIdAllowed || (*isIdAllowed)(getExternalLabel(cand_id))))
+                    {
+                        top_candidates.emplace(dist,cand_id);
+                    }
+                    if (top_candidates.size() > ef_search)
+                        top_candidates.pop();
+
+                    if (!top_candidates.empty())
+                        lowerBound = top_candidates.top().first;
+                }
+            }
+        }
+        visited_list_pool_->releaseVisitedList(vl);
+        while (top_candidates.size() > k)
+            top_candidates.pop();
+        while (!top_candidates.empty())
+        {
+            pair<dist_t, tableint> rez = top_candidates.top();
+            result.push(pair<dist_t, labeltype>(rez.first,getExternalLabel(rez.second)));
+            top_candidates.pop();
+        }
+        return result;
+    }
+
 
 
     // std::priority_queue<std::pair<dist_t, labeltype>>
@@ -2310,6 +2697,8 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
 
+    // KMeansTree approaches
+    // KMeansTree -> HNSW Normal with Single Entry Points
     std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
     {
     
@@ -2358,7 +2747,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return result;
     }
 
-    // KMeansTree -> HNSW Finger
+    // KMeansTree -> HNSW Finger with Single Entry Points
     std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
@@ -2388,7 +2777,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return searchFromEntryPointFinger(currObj,query_data,k,isIdAllowed);
     }
     
-    // KMeansTree -> TRI
+    // KMeansTree -> TRI with Single Entry Points
     std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
@@ -2417,6 +2806,137 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         // HNSW TRI search from selected entry point
         return searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
     }
+
+    // KMeansTree -> HNSW Normal with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> result;
+        if (cur_element_count == 0)
+            return result;
+        if (kmeanstree_ == nullptr)
+            return result;
+        const float* query_f =reinterpret_cast<const float*>(query_data);
+
+        // Get multiple entry points from KMeansTree
+        std::vector<int> seeds =kmeanstree_->searchNNMulti(query_f);
+        std::vector<tableint> entry_points;
+        entry_points.reserve(seeds.size());
+        for (int seed : seeds)
+        {
+            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
+            {
+                tableint ep = static_cast<tableint>(seed);
+                // Avoid duplicate entry points
+                if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+                {
+                    entry_points.push_back(ep);
+                }
+            }
+        }
+        // Fallback if no valid KMeans entry points exist
+        if (entry_points.empty())
+        {
+            entry_points.push_back(enterpoint_node_);
+        }
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
+        bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+        if (bare_bone_search)
+        {
+            top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),isIdAllowed);
+        }
+        else
+        {
+            top_candidates =searchBaseLayerSTMulti<false>(entry_points,query_data,max(ef_, k),isIdAllowed);
+        }
+        while (top_candidates.size() > k)
+            top_candidates.pop();
+        while (!top_candidates.empty())
+        {
+            pair<dist_t, tableint> rez =top_candidates.top();
+            result.push({rez.first,getExternalLabel(rez.second)});
+            top_candidates.pop();
+        }
+        return result;
+    }
+
+    // KMeansTree -> HNSW Finger with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> empty;
+        if (cur_element_count == 0)
+            return empty;
+
+        if (kmeanstree_ == nullptr)
+            return empty;
+
+        const float* query_f =reinterpret_cast<const float*>(query_data);
+
+        // Get all K representatives from the selected leaf
+        std::vector<int> seeds =kmeanstree_->searchNNMulti(query_f);
+        std::vector<tableint> entry_points;
+        entry_points.reserve(seeds.size());
+        for (int seed : seeds)
+        {
+            if (seed >= 0 &&
+                static_cast<size_t>(seed) < cur_element_count)
+            {
+                tableint ep = static_cast<tableint>(seed);
+                // Avoid duplicate entry points
+                if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+                {
+                    entry_points.push_back(ep);
+                }
+            }
+        }
+        if (entry_points.empty())
+        {
+            entry_points.push_back(enterpoint_node_);
+        }
+
+        // HNSW Finger search using ALL selected entry points
+        return searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+    }
+
+    // KMeansTree -> HNSW Tri with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> empty;
+        if (cur_element_count == 0)
+            return empty;
+
+        if (kmeanstree_ == nullptr)
+            return empty;
+
+        const float* query_f =reinterpret_cast<const float*>(query_data);
+
+        // Get all K representatives from the selected leaf
+        std::vector<int> seeds = kmeanstree_->searchNNMulti(query_f);
+
+        std::vector<tableint> entry_points;
+        entry_points.reserve(seeds.size());
+        for (int seed : seeds)
+        {
+            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
+            {
+                tableint ep = static_cast<tableint>(seed);
+
+                // Avoid duplicate entry points
+                if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+                {
+                    entry_points.push_back(ep);
+                }
+            }
+        }
+        if (entry_points.empty())
+        {
+            entry_points.push_back(enterpoint_node_);
+        }
+
+        // HNSW TRI search using ALL selected entry points
+        return searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+    }
+
+
 
 
     // TRI-SCHEME ENTRY-POINT VARIANTS
