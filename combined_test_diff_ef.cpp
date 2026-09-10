@@ -10,6 +10,7 @@
 #include <limits>
 #include "hnswlib/hnswlib.h"
 
+
 std::vector<float> read_fvecs(const std::string& path, int& dim, int& n) 
 {
     std::ifstream f(path, std::ios::binary);
@@ -121,12 +122,12 @@ int main(int argc, char** argv)
     const int finger_rank = 16;
     const int finger_warmup = 8;
     const int pctree_partitions = 4;
-    const int pctree_leaf_clusters = 3;
     const int mtree_pivots=5;
-    const int mtree_leaf_clusters = 3;
-    const int vpt_leaf_clusters = 3;
     const int kmeans_clusters = 4;
     const int kmeans_leaf_clusters = 3;
+    const int mtree_leaf_clusters = 3;
+    const int vpt_leaf_clusters = 3;
+    const int pctree_leaf_clusters = 3;
 
 
 

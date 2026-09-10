@@ -122,12 +122,12 @@ int main(int argc, char** argv)
     const int finger_warmup = 8;
     // const int vt_pivots = 2;
     const int pctree_partitions = 4;
-    const int pctree_leaf_clusters = 3;
     const int mtree_pivots=5;
-    const int mtree_leaf_clusters = 3;
-    const int vpt_leaf_clusters = 3;
     const int kmeans_clusters = 4;
     const int kmeans_leaf_clusters = 3;
+    const int pctree_leaf_clusters = 3;
+    const int mtree_leaf_clusters = 3;
+    const int vpt_leaf_clusters = 3;
 
 
 

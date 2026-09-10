@@ -44,3 +44,6 @@ hnswlib/kmeanstree.cpp \
 -o test_vpttree
 
 g++ -O3 -std=c++17 -I. -Ihnswlib -I/usr/include/eigen3 combined_test.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp hnswlib/kmeanstree.cpp -o combined_test
+
+
+g++ -O3 -std=c++17 -I. -Ihnswlib -I/usr/include/eigen3 combined_test_diff_ef.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp hnswlib/kmeanstree.cpp -o combined_test_diff_ef
