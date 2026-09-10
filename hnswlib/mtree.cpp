@@ -12,17 +12,19 @@ MTNode::~MTNode()
     }
 }
 
-MTree::MTree(char* data_level0_memory, size_t data_size, size_t dim, size_t num_vectors, int maxRoutingEntries, int maxLeafObjects)
+MTree::MTree(char* data_level0_memory, size_t data_size, size_t dim, size_t num_vectors, int maxRoutingEntries, int maxLeafObjects, int leafClusters)
 {
     this->data_level0_memory = data_level0_memory;
     this->data_size = data_size;
+    this->vector_offset = 0;
     this->dim = dim;
     this->num_vectors = num_vectors;
     this->maxRoutingEntries = maxRoutingEntries;
     this->maxLeafObjects = maxLeafObjects;
+    this->leafClusters = leafClusters < 1 ? 1 : leafClusters;
 }
 
-MTree::MTree(char* data_level0_memory, size_t data_size, size_t vector_offset, size_t dim, size_t num_vectors, int maxRoutingEntries, int maxLeafObjects)
+MTree::MTree(char* data_level0_memory, size_t data_size, size_t vector_offset, size_t dim, size_t num_vectors, int maxRoutingEntries, int maxLeafObjects, int leafClusters)
 {
     this->data_level0_memory = data_level0_memory;
     this->data_size = data_size;
@@ -31,6 +33,7 @@ MTree::MTree(char* data_level0_memory, size_t data_size, size_t vector_offset, s
     this->num_vectors = num_vectors;
     this->maxRoutingEntries = maxRoutingEntries;
     this->maxLeafObjects = maxLeafObjects;   
+    this->leafClusters = leafClusters;
     
     if (this->data_level0_memory == nullptr) 
     {
@@ -44,6 +47,10 @@ MTree::MTree(char* data_level0_memory, size_t data_size, size_t vector_offset, s
     {
         this->maxLeafObjects = 2;
     } 
+    if (this->leafClusters < 1) 
+    {
+        this->leafClusters = 1;
+    }
 }
 
 MTree::~MTree() 
@@ -415,25 +422,25 @@ int MTree::greedySearch(const float* query) const
 }
 
 
-int MTree::searchEntryPoint(const float* query) const
+const MTNode* MTree::findLeafNode(const float* query) const
 {
     if (root == nullptr || query == nullptr)
     {
-        return -1;
+        return nullptr;
     }
     const MTNode* node = root;
     while (node != nullptr && !node->isLeaf)
     {
         if (node->routingEntries.empty())
         {
-            return -1;
+            return nullptr;
         }
         int bestEntry = -1;
         float bestDist = std::numeric_limits<float>::infinity();
         for (size_t i = 0; i < node->routingEntries.size(); ++i)
         {
             const RoutingEntry& entry = node->routingEntries[i];
-            const float d =distance(query, getVector(entry.pivotID));
+            const float d = distance(query, getVector(entry.pivotID));
 
             if (d < bestDist)
             {
@@ -443,15 +450,33 @@ int MTree::searchEntryPoint(const float* query) const
         }
         if (bestEntry < 0)
         {
-            return -1;
+            return nullptr;
         }
         node = node->routingEntries[bestEntry].child;
     }
+    return node;
+}
+
+
+int MTree::searchEntryPoint(const float* query) const
+{
+    const MTNode* node = findLeafNode(query);
     if (node == nullptr)
     {
         return -1;
     }
     return node->centroidEntryPoint;
+}
+
+
+std::vector<int> MTree::searchEntryPointMulti(const float* query) const
+{
+    const MTNode* node = findLeafNode(query);
+    if (node == nullptr)
+    {
+        return {};
+    }
+    return node->leafClusterRepresentatives;
 }
 
 int MTree::getHeight() const
@@ -524,6 +549,208 @@ int MTree::findNearestToCentroid(const MTNode* leaf,const std::vector<float>& ce
     }
     return nearestID;
 }
+
+
+int MTree::findNearestToCentroidVec(const std::vector<float>& centroid,const std::vector<int>& vectorIndices) const
+{
+    if (vectorIndices.empty())
+        return -1;
+    int nearestID = -1;
+    float minDist = std::numeric_limits<float>::infinity();
+
+    for (int vectorID : vectorIndices)
+    {
+        const float* vec = getVector(vectorID);
+        if (vec == nullptr)
+            continue;
+        float dist = distance(centroid.data(), vec);
+        if (dist < minDist)
+        {
+            minDist = dist;
+            nearestID = vectorID;
+        }
+    }
+    return nearestID;
+}
+
+int MTree::findNearestCentroidIdx(const float* vector,const std::vector<std::vector<float>>& centroids) const
+{
+    int nearest = 0;
+    float minDistance = distance(vector, centroids[0].data());
+    for (size_t c = 1; c < centroids.size(); ++c)
+    {
+        float d = distance(vector, centroids[c].data());
+        if (d < minDistance)
+        {
+            minDistance = d;
+            nearest = static_cast<int>(c);
+        }
+    }
+    return nearest;
+}
+
+
+void MTree::initializeLeafCentroids(const std::vector<int>& vectorIndices,int k,std::vector<std::vector<float>>& centroids) const
+{
+    const int n = static_cast<int>(vectorIndices.size());
+    k = std::min(k, n);
+    centroids.clear();
+    centroids.resize(k, std::vector<float>(dim, 0.0f));
+
+    for (int c = 0; c < k; ++c)
+    {
+        int position = (static_cast<long long>(c) * n) / k;
+        if (position >= n)
+        {
+            position = n - 1;
+        }
+        const float* vec = getVector(vectorIndices[position]);
+        for (size_t d = 0; d < dim; ++d)
+        {
+            centroids[c][d] = vec[d];
+        }
+    }
+}
+
+
+void MTree::runLeafKMeans(const std::vector<int>& vectorIndices,std::vector<std::vector<float>>& centroids,std::vector<std::vector<int>>& clusters) const
+{
+    const int k = static_cast<int>(centroids.size());
+    const int n = static_cast<int>(vectorIndices.size());
+    if (k == 0 || n == 0)
+    {
+        clusters.clear();
+        return;
+    }
+
+    std::vector<int> assignments(n, -1);
+
+    for (int iteration = 0; iteration < MAX_KMEANS_ITERATIONS; ++iteration)
+    {
+        clusters.assign(k, std::vector<int>());
+        for (int i = 0; i < n; ++i)
+        {
+            int vectorID = vectorIndices[i];
+            int clusterID = findNearestCentroidIdx(getVector(vectorID), centroids);
+            assignments[i] = clusterID;
+            clusters[clusterID].push_back(vectorID);
+        }
+
+        std::vector<std::vector<float>> newCentroids(k, std::vector<float>(dim, 0.0f));
+        std::vector<int> clusterCounts(k, 0);
+        for (int i = 0; i < n; ++i)
+        {
+            int clusterID = assignments[i];
+            const float* vec = getVector(vectorIndices[i]);
+            clusterCounts[clusterID]++;
+            for (size_t d = 0; d < dim; ++d)
+            {
+                newCentroids[clusterID][d] += vec[d];
+            }
+        }
+
+        for (int c = 0; c < k; ++c)
+        {
+            if (clusterCounts[c] == 0)
+            {
+                int farthestIndex = -1;
+                float farthestDistance = -1.0f;
+                for (int i = 0; i < n; ++i)
+                {
+                    int assigned = assignments[i];
+                    float d = distance(getVector(vectorIndices[i]), centroids[assigned].data());
+                    if (d > farthestDistance)
+                    {
+                        farthestDistance = d;
+                        farthestIndex = i;
+                    }
+                }
+                if (farthestIndex >= 0)
+                {
+                    const float* vec = getVector(vectorIndices[farthestIndex]);
+                    for (size_t d = 0; d < dim; ++d)
+                    {
+                        newCentroids[c][d] = vec[d];
+                    }
+                    clusterCounts[c] = 1;
+                }
+            }
+        }
+
+        for (int c = 0; c < k; ++c)
+        {
+            if (clusterCounts[c] > 0)
+            {
+                float invCount = 1.0f / static_cast<float>(clusterCounts[c]);
+                for (size_t d = 0; d < dim; ++d)
+                {
+                    newCentroids[c][d] *= invCount;
+                }
+            }
+        }
+
+        float maxMovement = 0.0f;
+        for (int c = 0; c < k; ++c)
+        {
+            float movement = 0.0f;
+            for (size_t d = 0; d < dim; ++d)
+            {
+                float diff = newCentroids[c][d] - centroids[c][d];
+                movement += diff * diff;
+            }
+            maxMovement = std::max(maxMovement, movement);
+        }
+
+        centroids = std::move(newCentroids);
+        if (maxMovement < KMEANS_TOLERANCE * KMEANS_TOLERANCE)
+        {
+            break;
+        }
+    }
+
+    clusters.assign(k, std::vector<int>());
+    for (int vectorID : vectorIndices)
+    {
+        int clusterID = findNearestCentroidIdx(getVector(vectorID), centroids);
+        clusters[clusterID].push_back(vectorID);
+    }
+}
+
+
+void MTree::populateLeafMulti(MTNode* node)
+{
+    if (node == nullptr || node->objectEntries.empty())
+    {
+        return;
+    }
+
+    std::vector<int> ids;
+    ids.reserve(node->objectEntries.size());
+    for (const ObjectEntry& entry : node->objectEntries)
+    {
+        ids.push_back(entry.vectorID);
+    }
+
+    // leafClusters == 1 naturally reduces to a single cluster covering
+    // the whole leaf (still independent of centroidEntryPoint above).
+    std::vector<std::vector<float>> leafCentroids;
+    std::vector<std::vector<int>> leafClusterAssignments;
+
+    initializeLeafCentroids(ids, this->leafClusters, leafCentroids);
+    runLeafKMeans(ids, leafCentroids, leafClusterAssignments);
+
+    node->leafClusterCentroids = std::move(leafCentroids);
+
+    node->leafClusterRepresentatives.clear();
+    node->leafClusterRepresentatives.reserve(node->leafClusterCentroids.size());
+    for (size_t c = 0; c < node->leafClusterCentroids.size(); ++c)
+    {
+        int representative = findNearestToCentroidVec(node->leafClusterCentroids[c], leafClusterAssignments[c]);
+        node->leafClusterRepresentatives.push_back(representative);
+    }
+}
+
+
 void MTree::preprocessLeafEntryPoints(MTNode* node)
 {
     if (node == nullptr)
@@ -538,6 +765,9 @@ void MTree::preprocessLeafEntryPoints(MTNode* node)
             std::vector<float> centroid =
                 computeLeafCentroid(node);
             node->centroidEntryPoint =findNearestToCentroid(node,centroid);
+
+            // Approach 2: leaf-level K-Means for multiple entry points
+            populateLeafMulti(node);
         }
         return;
     }

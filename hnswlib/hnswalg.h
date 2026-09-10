@@ -455,26 +455,23 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     //     vtree_->build();
     // }
 
-    void buildMTree(int mtree_pivots,int leaf_capacity) 
+    void buildMTree(int mtree_pivots,int leaf_capacity,int leafClusters) 
     {
         delete mtree_;
-
-        mtree_ = new MTree(data_level0_memory_,size_data_per_element_,offsetData_,data_size_ / sizeof(float),cur_element_count,mtree_pivots,leaf_capacity);
-
+        mtree_ = new MTree(data_level0_memory_,size_data_per_element_,offsetData_,data_size_ / sizeof(float),cur_element_count,mtree_pivots,leaf_capacity,leafClusters);
         mtree_->build();
     }
 
-    void buildPCTree(int numPartitions,int leaf_capacity) 
+    void buildPCTree(int numPartitions,int leaf_capacity,int leafClusters) 
     {
         delete pctree_;
-        pctree_ = new ::PCTree(data_level0_memory_,size_data_per_element_,data_size_ / sizeof(float),cur_element_count,leaf_capacity,numPartitions);
+        pctree_ = new ::PCTree(data_level0_memory_,size_data_per_element_,data_size_ / sizeof(float),cur_element_count,leaf_capacity,numPartitions,leafClusters);
     }
 
-    void buildVantagePointTree(int leaf_capacity) 
+    void buildVantagePointTree(int leaf_capacity,int leafClusters) 
     {
         delete vpt_;
-        vpt_ = new VantagePointTree(data_level0_memory_,data_size_,data_size_ / sizeof(float),cur_element_count,leaf_capacity);
-
+        vpt_ = new VantagePointTree(data_level0_memory_,data_size_,data_size_ / sizeof(float),cur_element_count,leaf_capacity,leafClusters);
         vpt_->build();
     }
 
@@ -1081,7 +1078,6 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         visited_list_pool_->releaseVisitedList(vl);
         return top_candidates;
     }
-
 
 
     // TRIANGLE-ACCELERATED BASE LAYER SEARCH
@@ -2394,6 +2390,8 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
 
+    // MTree approaches
+    // MTree - Normal HNSW with Single Entry point
     std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> result;
@@ -2444,7 +2442,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return result;
     }
 
-
+    // MTree - FINGER HNSW with Single Entry point
     std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
@@ -2471,7 +2469,174 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return searchFromEntryPointFinger(currObj, query_data, k, isIdAllowed);
     }
 
+    // MTree - Tri HNSW with Single Entry point
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnMTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    {
+        priority_queue<pair<dist_t, labeltype>> empty;
+        if (cur_element_count == 0)
+            return empty;
 
+        if (!tri_ready_) 
+        {
+            throw runtime_error(
+                "TRI search requested before buildTriDistances().");
+        }
+
+        tableint currObj = enterpoint_node_;
+        dist_t curdist =fstdistfunc_(query_data,getDataByInternalId(currObj),dist_func_param_);
+
+        if (mtree_ != nullptr) 
+        {
+            const float* query_f =reinterpret_cast<const float*>(query_data);
+            const int seed = mtree_->searchEntryPoint(query_f);
+            if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count) 
+            {
+                dist_t d =fstdistfunc_(query_data,getDataByInternalId(static_cast<tableint>(seed)),dist_func_param_);
+                if (d < curdist) 
+                {
+                    curdist = d;
+                    currObj = static_cast<tableint>(seed);
+                }
+            }
+        }
+
+        return searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
+    }
+
+    // MTree -> HNSW Normal with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> result;
+        if (cur_element_count == 0)
+            return result;
+        if (mtree_ == nullptr)
+            return result;
+        const float* query_f =reinterpret_cast<const float*>(query_data);
+
+        // Get multiple entry points from MTree
+        std::vector<int> seeds =mtree_->searchEntryPointMulti(query_f);
+        std::vector<tableint> entry_points;
+        entry_points.reserve(seeds.size());
+        for (int seed : seeds)
+        {
+            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
+            {
+                tableint ep = static_cast<tableint>(seed);
+                // Avoid duplicate entry points
+                if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+                {
+                    entry_points.push_back(ep);
+                }
+            }
+        }
+        // Fallback if no valid MTree entry points exist
+        if (entry_points.empty())
+        {
+            entry_points.push_back(enterpoint_node_);
+        }
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
+        bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+        if (bare_bone_search)
+        {
+            top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),isIdAllowed);
+        }
+        else
+        {
+            top_candidates =searchBaseLayerSTMulti<false>(entry_points,query_data,max(ef_, k),isIdAllowed);
+        }
+        while (top_candidates.size() > k)
+            top_candidates.pop();
+        while (!top_candidates.empty())
+        {
+            pair<dist_t, tableint> rez =top_candidates.top();
+            result.push({rez.first,getExternalLabel(rez.second)});
+            top_candidates.pop();
+        }
+        return result;
+    }
+
+    // MTree -> HNSW Finger with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> empty;
+        if (cur_element_count == 0)
+            return empty;
+
+        if (mtree_ == nullptr)
+            return empty;
+
+        const float* query_f =reinterpret_cast<const float*>(query_data);
+
+        // Get all K representatives from the selected leaf
+        std::vector<int> seeds =mtree_->searchEntryPointMulti(query_f);
+        std::vector<tableint> entry_points;
+        entry_points.reserve(seeds.size());
+        for (int seed : seeds)
+        {
+            if (seed >= 0 &&
+                static_cast<size_t>(seed) < cur_element_count)
+            {
+                tableint ep = static_cast<tableint>(seed);
+                // Avoid duplicate entry points
+                if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+                {
+                    entry_points.push_back(ep);
+                }
+            }
+        }
+        if (entry_points.empty())
+        {
+            entry_points.push_back(enterpoint_node_);
+        }
+
+        // HNSW Finger search using ALL selected entry points
+        return searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+    }
+
+    // MTree -> HNSW Tri with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> empty;
+        if (cur_element_count == 0)
+            return empty;
+
+        if (mtree_ == nullptr)
+            return empty;
+
+        const float* query_f =reinterpret_cast<const float*>(query_data);
+
+        // Get all K representatives from the selected leaf
+        std::vector<int> seeds = mtree_->searchEntryPointMulti(query_f);
+
+        std::vector<tableint> entry_points;
+        entry_points.reserve(seeds.size());
+        for (int seed : seeds)
+        {
+            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
+            {
+                tableint ep = static_cast<tableint>(seed);
+
+                // Avoid duplicate entry points
+                if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+                {
+                    entry_points.push_back(ep);
+                }
+            }
+        }
+        if (entry_points.empty())
+        {
+            entry_points.push_back(enterpoint_node_);
+        }
+
+        // HNSW TRI search using ALL selected entry points
+        return searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+    }
+
+
+
+
+    // VPTree approaches
+    // VPTree - Normal HNSW with Single Entry point
     std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
     {
 
@@ -2522,7 +2687,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return result;
     }
 
-
+    // VPTree - FINGER HNSW with Single Entry point
     std::priority_queue<std::pair<dist_t, labeltype>> searchKnnVPTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
@@ -2549,9 +2714,174 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return searchFromEntryPointFinger(currObj, query_data, k, isIdAllowed);
     }
 
+    // VPTree - Tri HNSW with Single Entry point
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnVPTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    {
+
+        priority_queue<pair<dist_t, labeltype>> empty;
+        if (cur_element_count == 0)
+            return empty;
+
+        if (!tri_ready_) 
+        {
+            throw runtime_error("TRI search requested before buildTriDistances().");
+        }
+
+        tableint currObj = enterpoint_node_;
+        dist_t curdist =fstdistfunc_(query_data,getDataByInternalId(currObj),dist_func_param_);
+
+        if (vpt_ != nullptr) 
+        {
+            const float* query_f =reinterpret_cast<const float*>(query_data);
+            const int seed = vpt_->searchEntryPoint(query_f);
+            if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count)
+            {
+                dist_t d =fstdistfunc_(query_data,getDataByInternalId(static_cast<tableint>(seed)),dist_func_param_);
+                if (d < curdist)
+                {
+                    curdist = d;
+                    currObj = static_cast<tableint>(seed);
+                }
+            }
+        }
+
+        return searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
+    }
+
+    // VPTree -> HNSW Normal with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> result;
+        if (cur_element_count == 0)
+            return result;
+        if (vpt_ == nullptr)
+            return result;
+        const float* query_f =reinterpret_cast<const float*>(query_data);
+
+        // Get multiple entry points from VPTree
+        std::vector<int> seeds =vpt_->searchEntryPointMulti(query_f);
+        std::vector<tableint> entry_points;
+        entry_points.reserve(seeds.size());
+        for (int seed : seeds)
+        {
+            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
+            {
+                tableint ep = static_cast<tableint>(seed);
+                // Avoid duplicate entry points
+                if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+                {
+                    entry_points.push_back(ep);
+                }
+            }
+        }
+        // Fallback if no valid VPTree entry points exist
+        if (entry_points.empty())
+        {
+            entry_points.push_back(enterpoint_node_);
+        }
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
+        bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+        if (bare_bone_search)
+        {
+            top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),isIdAllowed);
+        }
+        else
+        {
+            top_candidates =searchBaseLayerSTMulti<false>(entry_points,query_data,max(ef_, k),isIdAllowed);
+        }
+        while (top_candidates.size() > k)
+            top_candidates.pop();
+        while (!top_candidates.empty())
+        {
+            pair<dist_t, tableint> rez =top_candidates.top();
+            result.push({rez.first,getExternalLabel(rez.second)});
+            top_candidates.pop();
+        }
+        return result;
+    }
+
+    // VPTree -> HNSW Finger with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> empty;
+        if (cur_element_count == 0)
+            return empty;
+
+        if (vpt_ == nullptr)
+            return empty;
+
+        const float* query_f =reinterpret_cast<const float*>(query_data);
+
+        // Get all K representatives from the selected leaf
+        std::vector<int> seeds =vpt_->searchEntryPointMulti(query_f);
+        std::vector<tableint> entry_points;
+        entry_points.reserve(seeds.size());
+        for (int seed : seeds)
+        {
+            if (seed >= 0 &&
+                static_cast<size_t>(seed) < cur_element_count)
+            {
+                tableint ep = static_cast<tableint>(seed);
+                // Avoid duplicate entry points
+                if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+                {
+                    entry_points.push_back(ep);
+                }
+            }
+        }
+        if (entry_points.empty())
+        {
+            entry_points.push_back(enterpoint_node_);
+        }
+
+        // HNSW Finger search using ALL selected entry points
+        return searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+    }
+
+    // VPTree -> HNSW Tri with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+{
+    priority_queue<pair<dist_t, labeltype>> empty;
+    if (cur_element_count == 0)
+        return empty;
+
+    if (vpt_ == nullptr)
+        return empty;
+
+    const float* query_f =reinterpret_cast<const float*>(query_data);
+
+    // Get all K representatives from the selected leaf
+    std::vector<int> seeds = vpt_->searchEntryPointMulti(query_f);
+
+    std::vector<tableint> entry_points;
+    entry_points.reserve(seeds.size());
+    for (int seed : seeds)
+    {
+        if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
+        {
+            tableint ep = static_cast<tableint>(seed);
+
+            // Avoid duplicate entry points
+            if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+            {
+                entry_points.push_back(ep);
+            }
+        }
+    }
+    if (entry_points.empty())
+    {
+        entry_points.push_back(enterpoint_node_);
+    }
+
+    // HNSW TRI search using ALL selected entry points
+    return searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+}
 
 
-    // PCTree - Normal HNSW
+
+
+    // PCTree approaches
+    // PCTree - Normal HNSW with Single Entry point
     std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
     {
 
@@ -2607,8 +2937,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return result;
     }
 
-
-    // PCTree - FINGER HNSW
+    // PCTree - FINGER HNSW with Single Entry point
     std::priority_queue<std::pair<dist_t, labeltype>> searchKnnPCTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
@@ -2638,8 +2967,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return searchFromEntryPointFinger(currObj, query_data, k, isIdAllowed);
     }
 
-
-    // PCTree - TriScheme
+    // PCTree - Tri HNSW with Single Entry point
     std::priority_queue<std::pair<dist_t, labeltype>> searchKnnPCTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
     {
 
@@ -2695,8 +3023,139 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return empty;
     }
 
+    // PCTree -> HNSW Normal with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> result;
+        if (cur_element_count == 0)
+            return result;
+        if (pctree_ == nullptr)
+            return result;
+        const float* query_f =reinterpret_cast<const float*>(query_data);
+
+        // Get multiple entry points from PCTree
+        std::vector<int> seeds =pctree_->searchNNMulti(query_f);
+        std::vector<tableint> entry_points;
+        entry_points.reserve(seeds.size());
+        for (int seed : seeds)
+        {
+            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
+            {
+                tableint ep = static_cast<tableint>(seed);
+                // Avoid duplicate entry points
+                if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+                {
+                    entry_points.push_back(ep);
+                }
+            }
+        }
+        // Fallback if no valid PCTree entry points exist
+        if (entry_points.empty())
+        {
+            entry_points.push_back(enterpoint_node_);
+        }
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
+        bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+        if (bare_bone_search)
+        {
+            top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),isIdAllowed);
+        }
+        else
+        {
+            top_candidates =searchBaseLayerSTMulti<false>(entry_points,query_data,max(ef_, k),isIdAllowed);
+        }
+        while (top_candidates.size() > k)
+            top_candidates.pop();
+        while (!top_candidates.empty())
+        {
+            pair<dist_t, tableint> rez =top_candidates.top();
+            result.push({rez.first,getExternalLabel(rez.second)});
+            top_candidates.pop();
+        }
+        return result;
+    }
+
+    // PCTree -> HNSW Finger with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> empty;
+        if (cur_element_count == 0)
+            return empty;
+
+        if (pctree_ == nullptr)
+            return empty;
+
+        const float* query_f =reinterpret_cast<const float*>(query_data);
+
+        // Get all K representatives from the selected leaf
+        std::vector<int> seeds =pctree_->searchNNMulti(query_f);
+        std::vector<tableint> entry_points;
+        entry_points.reserve(seeds.size());
+        for (int seed : seeds)
+        {
+            if (seed >= 0 &&
+                static_cast<size_t>(seed) < cur_element_count)
+            {
+                tableint ep = static_cast<tableint>(seed);
+                // Avoid duplicate entry points
+                if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+                {
+                    entry_points.push_back(ep);
+                }
+            }
+        }
+        if (entry_points.empty())
+        {
+            entry_points.push_back(enterpoint_node_);
+        }
+
+        // HNSW Finger search using ALL selected entry points
+        return searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+    }
+
+    // PCTree -> HNSW Tri with Multiple Entry Points
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    {
+        priority_queue<pair<dist_t, labeltype>> empty;
+        if (cur_element_count == 0)
+            return empty;
+
+        if (pctree_ == nullptr)
+            return empty;
+
+        const float* query_f =reinterpret_cast<const float*>(query_data);
+
+        // Get all K representatives from the selected leaf
+        std::vector<int> seeds = pctree_->searchNNMulti(query_f);
+
+        std::vector<tableint> entry_points;
+        entry_points.reserve(seeds.size());
+        for (int seed : seeds)
+        {
+            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
+            {
+                tableint ep = static_cast<tableint>(seed);
+
+                // Avoid duplicate entry points
+                if (std::find(entry_points.begin(),entry_points.end(),ep) == entry_points.end())
+                {
+                    entry_points.push_back(ep);
+                }
+            }
+        }
+        if (entry_points.empty())
+        {
+            entry_points.push_back(enterpoint_node_);
+        }
+
+        // HNSW TRI search using ALL selected entry points
+        return searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+    }
 
 
+
+
+    
     // KMeansTree approaches
     // KMeansTree -> HNSW Normal with Single Entry Points
     std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
@@ -2938,7 +3397,6 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
 
-
     // TRI-SCHEME ENTRY-POINT VARIANTS
     // Each method keeps its original entry-point indexing structure
     // and replaces only the Level-0 HNSW search with searchBaseLayerTri().
@@ -2986,77 +3444,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
 
-
-    // MTree -> TRI
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnMTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
-    {
-        priority_queue<pair<dist_t, labeltype>> empty;
-        if (cur_element_count == 0)
-            return empty;
-
-        if (!tri_ready_) 
-        {
-            throw runtime_error(
-                "TRI search requested before buildTriDistances().");
-        }
-
-        tableint currObj = enterpoint_node_;
-        dist_t curdist =fstdistfunc_(query_data,getDataByInternalId(currObj),dist_func_param_);
-
-        if (mtree_ != nullptr) 
-        {
-            const float* query_f =reinterpret_cast<const float*>(query_data);
-            const int seed = mtree_->searchEntryPoint(query_f);
-            if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count) 
-            {
-                dist_t d =fstdistfunc_(query_data,getDataByInternalId(static_cast<tableint>(seed)),dist_func_param_);
-                if (d < curdist) 
-                {
-                    curdist = d;
-                    currObj = static_cast<tableint>(seed);
-                }
-            }
-        }
-
-        return searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
-    }
-
-
-
-    // VPTree -> TRI
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnVPTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
-    {
-
-        priority_queue<pair<dist_t, labeltype>> empty;
-        if (cur_element_count == 0)
-            return empty;
-
-        if (!tri_ready_) 
-        {
-            throw runtime_error("TRI search requested before buildTriDistances().");
-        }
-
-        tableint currObj = enterpoint_node_;
-        dist_t curdist =fstdistfunc_(query_data,getDataByInternalId(currObj),dist_func_param_);
-
-        if (vpt_ != nullptr) 
-        {
-            const float* query_f =reinterpret_cast<const float*>(query_data);
-            const int seed = vpt_->searchEntryPoint(query_f);
-            if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count)
-            {
-                dist_t d =fstdistfunc_(query_data,getDataByInternalId(static_cast<tableint>(seed)),dist_func_param_);
-                if (d < curdist)
-                {
-                    curdist = d;
-                    currObj = static_cast<tableint>(seed);
-                }
-            }
-        }
-
-        return searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
-    }
-
+    
     // VTree -> TRI
     // std::priority_queue<std::pair<dist_t, labeltype>>
     // searchKnnVTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 

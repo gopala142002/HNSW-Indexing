@@ -8,7 +8,7 @@
 #include <stdexcept>
 
 
-PCTree::PCTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t num_vectors,int leafCapacity,int numPartitions)
+PCTree::PCTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t num_vectors,int leafCapacity,int numPartitions,int leafClusters)
 {
     this->data_level0_memory = data_level0_memory;
     this->data_size = data_size;
@@ -16,6 +16,7 @@ PCTree::PCTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t
     this->num_vectors = num_vectors;
     this->leafCapacity = leafCapacity;
     this->numPartitions = numPartitions;
+    this->leafClusters = leafClusters;
 
     if (data_level0_memory == nullptr)
     {
@@ -28,6 +29,10 @@ PCTree::PCTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t
     if (numPartitions < 2)
     {
         throw std::invalid_argument("PCTree: numPartitions must be >= 2");
+    }
+    if (leafClusters < 1)
+    {
+        throw std::invalid_argument("PCTree: leafClusters must be >= 1");
     }
     std::vector<int> allIndices(num_vectors);
     for (size_t i = 0; i < num_vectors; ++i)
@@ -163,6 +168,180 @@ int PCTree::findNearestToPoint(const float* point,const std::vector<int>& vector
 }
 
 
+int PCTree::findNearestCentroid(const float* vector,const std::vector<std::vector<float>>& centroids) const
+{
+    int nearest = 0;
+    float minDistance = squaredL2Distance(vector, centroids[0].data());
+    for (size_t c = 1; c < centroids.size(); ++c)
+    {
+        float distance = squaredL2Distance(vector, centroids[c].data());
+        if (distance < minDistance)
+        {
+            minDistance = distance;
+            nearest = static_cast<int>(c);
+        }
+    }
+    return nearest;
+}
+
+
+void PCTree::initializeLeafCentroids(const std::vector<int>& vectorIndices,int k,std::vector<std::vector<float>>& centroids) const
+{
+    const int n = static_cast<int>(vectorIndices.size());
+    k = std::min(k, n);
+    centroids.clear();
+    centroids.resize(k, std::vector<float>(dim, 0.0f));
+
+    for (int c = 0; c < k; ++c)
+    {
+        int position = (static_cast<long long>(c) * n) / k;
+        if (position >= n)
+        {
+            position = n - 1;
+        }
+        const float* vec = getVector(vectorIndices[position]);
+        for (size_t d = 0; d < dim; ++d)
+        {
+            centroids[c][d] = vec[d];
+        }
+    }
+}
+
+
+void PCTree::runLeafKMeans(const std::vector<int>& vectorIndices,std::vector<std::vector<float>>& centroids,std::vector<std::vector<int>>& clusters) const
+{
+    const int k = static_cast<int>(centroids.size());
+    const int n = static_cast<int>(vectorIndices.size());
+    if (k == 0 || n == 0)
+    {
+        clusters.clear();
+        return;
+    }
+
+    std::vector<int> assignments(n, -1);
+
+    for (int iteration = 0; iteration < MAX_KMEANS_ITERATIONS; ++iteration)
+    {
+        clusters.assign(k, std::vector<int>());
+        for (int i = 0; i < n; ++i)
+        {
+            int vectorID = vectorIndices[i];
+            int clusterID = findNearestCentroid(getVector(vectorID), centroids);
+            assignments[i] = clusterID;
+            clusters[clusterID].push_back(vectorID);
+        }
+
+        std::vector<std::vector<float>> newCentroids(k, std::vector<float>(dim, 0.0f));
+        std::vector<int> clusterCounts(k, 0);
+        for (int i = 0; i < n; ++i)
+        {
+            int clusterID = assignments[i];
+            const float* vec = getVector(vectorIndices[i]);
+            clusterCounts[clusterID]++;
+            for (size_t d = 0; d < dim; ++d)
+            {
+                newCentroids[clusterID][d] += vec[d];
+            }
+        }
+
+        for (int c = 0; c < k; ++c)
+        {
+            if (clusterCounts[c] == 0)
+            {
+                int farthestIndex = -1;
+                float farthestDistance = -1.0f;
+                for (int i = 0; i < n; ++i)
+                {
+                    int assigned = assignments[i];
+                    float distance = squaredL2Distance(getVector(vectorIndices[i]), centroids[assigned].data());
+                    if (distance > farthestDistance)
+                    {
+                        farthestDistance = distance;
+                        farthestIndex = i;
+                    }
+                }
+                if (farthestIndex >= 0)
+                {
+                    const float* vec = getVector(vectorIndices[farthestIndex]);
+                    for (size_t d = 0; d < dim; ++d)
+                    {
+                        newCentroids[c][d] = vec[d];
+                    }
+                    clusterCounts[c] = 1;
+                }
+            }
+        }
+
+        for (int c = 0; c < k; ++c)
+        {
+            if (clusterCounts[c] > 0)
+            {
+                float invCount = 1.0f / static_cast<float>(clusterCounts[c]);
+                for (size_t d = 0; d < dim; ++d)
+                {
+                    newCentroids[c][d] *= invCount;
+                }
+            }
+        }
+
+        float maxMovement = 0.0f;
+        for (int c = 0; c < k; ++c)
+        {
+            float movement = 0.0f;
+            for (size_t d = 0; d < dim; ++d)
+            {
+                float diff = newCentroids[c][d] - centroids[c][d];
+                movement += diff * diff;
+            }
+            maxMovement = std::max(maxMovement, movement);
+        }
+
+        centroids = std::move(newCentroids);
+        if (maxMovement < KMEANS_TOLERANCE * KMEANS_TOLERANCE)
+        {
+            break;
+        }
+    }
+
+    clusters.assign(k, std::vector<int>());
+    for (int vectorID : vectorIndices)
+    {
+        int clusterID = findNearestCentroid(getVector(vectorID), centroids);
+        clusters[clusterID].push_back(vectorID);
+    }
+}
+
+
+void PCTree::populateLeaf(PCNode* node)
+{
+    // --- Approach 1: single leaf representative (unchanged behavior) ---
+    std::vector<float> centroid = computeCentroid(node->vectorIndices);
+    node->representative = findNearestToPoint(centroid.data(), node->vectorIndices);
+
+    // --- Approach 2: leaf-level K-Means for multiple HNSW entry points ---
+    // leafClusters == 1 naturally reduces to the same "nearest vector to
+    // leaf centroid" result as Approach 1 above.
+    std::vector<std::vector<float>> leafCentroids;
+    std::vector<std::vector<int>> leafClusterAssignments;
+
+    initializeLeafCentroids(node->vectorIndices, this->leafClusters, leafCentroids);
+    runLeafKMeans(node->vectorIndices, leafCentroids, leafClusterAssignments);
+
+    node->leafClusterCentroids = std::move(leafCentroids);
+
+    node->leafClusterRepresentatives.clear();
+    node->leafClusterRepresentatives.reserve(node->leafClusterCentroids.size());
+    for (size_t c = 0; c < node->leafClusterCentroids.size(); ++c)
+    {
+        int representative = findNearestToPoint(
+            node->leafClusterCentroids[c].data(),
+            leafClusterAssignments[c]
+        );
+        node->leafClusterRepresentatives.push_back(representative);
+    }
+}
+
+
 PCNode* PCTree::buildNode(std::vector<int>& vectorIndices,const std::vector<float>& parentPC)
 {
     PCNode* node = new PCNode();
@@ -171,9 +350,7 @@ PCNode* PCTree::buildNode(std::vector<int>& vectorIndices,const std::vector<floa
         node->isLeaf = true;
         node->vectorIndices =std::move(vectorIndices);
         node->parentDotProduct =dotProduct(parentPC.data(),parentPC.data());
-        std::vector<float> centroid =computeCentroid(node->vectorIndices);
-
-        node->representative =findNearestToPoint(centroid.data(),node->vectorIndices);
+        populateLeaf(node);
         return node;
     }
 
@@ -239,40 +416,53 @@ PCNode* PCTree::buildNode(std::vector<int>& vectorIndices,const std::vector<floa
 }
 
 
-std::vector<int> PCTree::searchNN(
-    const float* query) const
+PCNode* PCTree::findLeaf(const float* query) const
 {
-    std::vector<int> representatives;
     if (!root || query == nullptr)
     {
-        return representatives;
+        return nullptr;
     }
     PCNode* current = root;
-    while (current != nullptr)
+    while (current != nullptr && !current->isLeaf)
     {
-        if (current->isLeaf)
-        {
-            if (current->representative >= 0)
-            {
-                representatives.push_back(current->representative);
-            }
-            break;
-        }
-        float queryProj =dotProduct(query,current->principalComponent.data());
+        float queryProj = dotProduct(query, current->principalComponent.data());
         size_t childIndex = 0;
-        while (childIndex < current->splitPoints.size() &&queryProj >=current->splitPoints[childIndex])
+        while (childIndex < current->splitPoints.size() && queryProj >= current->splitPoints[childIndex])
         {
             ++childIndex;
         }
 
         // Safety check
-        if (childIndex >=current->children.size())
+        if (childIndex >= current->children.size())
         {
-            childIndex =current->children.size() - 1;
+            childIndex = current->children.size() - 1;
         }
-        current =current->children[childIndex];
+        current = current->children[childIndex];
+    }
+    return current;
+}
+
+
+std::vector<int> PCTree::searchNN(const float* query) const
+{
+    std::vector<int> representatives;
+    PCNode* leaf = findLeaf(query);
+    if (leaf != nullptr && leaf->representative >= 0)
+    {
+        representatives.push_back(leaf->representative);
     }
     return representatives;
+}
+
+
+std::vector<int> PCTree::searchNNMulti(const float* query) const
+{
+    PCNode* leaf = findLeaf(query);
+    if (leaf == nullptr)
+    {
+        return {};
+    }
+    return leaf->leafClusterRepresentatives;
 }
 
 
