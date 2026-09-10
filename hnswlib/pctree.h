@@ -90,7 +90,7 @@ class PCTree
     public:
         PCTree(const char* data_level0_memory, size_t data_size, size_t dim,size_t num_vectors, int leafCapacity,int numPartitions,int leafClusters);
         ~PCTree();
-        std::vector<int> searchNN(const float* query) const;
+        int searchNN(const float* query) const;
         std::vector<int> searchNNMulti(const float* query) const;
         int getHeight(PCNode* root) const;
         int getHeight() const;

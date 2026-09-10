@@ -10,7 +10,6 @@
 #include <limits>
 #include "hnswlib/hnswlib.h"
 
-
 std::vector<float> read_fvecs(const std::string& path, int& dim, int& n) 
 {
     std::ifstream f(path, std::ios::binary);
@@ -104,7 +103,7 @@ std::vector<size_t> extract_ids(std::priority_queue<std::pair<float, hnswlib::la
 
 int main(int argc, char** argv) 
 {
-    const std::string data_dir =(argc > 1)? argv[1]: "./datasets/glove";
+    const std::string data_dir =(argc > 1)? argv[1]: "./datasets/sift";
     const std::string base_path =data_dir + "/base.fvecs";
     const std::string query_path =data_dir + "/query.fvecs";
     const std::string gt_path =data_dir + "/groundtruth.ivecs";
@@ -114,6 +113,7 @@ int main(int argc, char** argv)
     // Parameters
     const int M = 16;
     const int ef_construction = 200;
+
     // Search-effort values to benchmark. The graph and auxiliary trees are built once.
     const std::vector<int> ef_search_values = {10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200};
     const int k = 30;
@@ -246,11 +246,14 @@ int main(int argc, char** argv)
     std::cout << "TRI structures built in " << std::fixed << std::setprecision(2)
               << tri_build_sec << " s.\n\n";
 
-    const std::string csv_path = "hnsw_results_glove_ef.csv";
+    const std::string csv_path = "hnsw_results_sift_ef.csv";
+
+    profilingStats profiler;
 
     for (int ef_search : ef_search_values)
     {
         hnsw.setEf(ef_search);
+        profiler.reset(hnsw_num_levels);
 
         std::cout << "Running " << Q << " queries (k=" << k
                   << ", ef=" << ef_search << ")...\n";
@@ -323,7 +326,7 @@ int main(int argc, char** argv)
 
         // for baseline hnsw
         auto start =std::chrono::high_resolution_clock::now();
-        auto pq_hnsw =hnsw.searchKnn(query,static_cast<size_t>(k));
+        auto pq_hnsw =hnsw.searchKnn(query,static_cast<size_t>(k),nullptr,&profiler);
         auto end =std::chrono::high_resolution_clock::now();
         time_hnsw_ns += std::chrono::duration<double, std::nano>(end - start).count();
         std::vector<size_t> hnsw_ids =extract_ids(pq_hnsw, k);
@@ -332,7 +335,7 @@ int main(int argc, char** argv)
 
         // HNSW -> TRI
         start = std::chrono::high_resolution_clock::now();
-        auto pq_hnsw_tri = hnsw.searchKnnTri(query, static_cast<size_t>(k));
+        auto pq_hnsw_tri = hnsw.searchKnnTri(query,static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_hnsw_tri_ns += std::chrono::duration<double, std::nano>(end-start).count();
         auto hnsw_tri_ids = extract_ids(pq_hnsw_tri, k);
@@ -341,7 +344,7 @@ int main(int argc, char** argv)
 
         // HNSW + FINGER
         start = std::chrono::high_resolution_clock::now();
-        auto pq_hnsw_finger =hnsw.searchKnnFinger(query, static_cast<size_t>(k));
+        auto pq_hnsw_finger =hnsw.searchKnnFinger(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_hnsw_finger_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         std::vector<size_t> hnsw_finger_ids =extract_ids(pq_hnsw_finger, k);
@@ -351,7 +354,7 @@ int main(int argc, char** argv)
 
         // for mtree->hnsw(level-0)
         start =std::chrono::high_resolution_clock::now();
-        auto pq_mtree =hnsw.searchKnnMTree(query,static_cast<size_t>(k));
+        auto pq_mtree =hnsw.searchKnnMTree(query,static_cast<size_t>(k),nullptr,&profiler);
         end =std::chrono::high_resolution_clock::now();
         time_mtree_ns += std::chrono::duration<double, std::nano>(end - start).count();
         auto mtree_ids =extract_ids(pq_mtree,k);
@@ -367,7 +370,7 @@ int main(int argc, char** argv)
         total_recall_mtree_tri += recall_at_k(gt_q, gt_dim, mtree_tri_ids, k);
 
 
-        // for mtree->(level-0 + finer optimization)
+        // for mtree->(level-0 + finger optimization)
         start =std::chrono::high_resolution_clock::now();
         auto pq_mtree_finger =hnsw.searchKnnMTreeFinger(query,static_cast<size_t>(k));
         end =std::chrono::high_resolution_clock::now();
@@ -405,7 +408,7 @@ int main(int argc, char** argv)
 
         // for pctree -> hnsw(level-0)
         start =std::chrono::high_resolution_clock::now();
-        auto pq_pctree =hnsw.searchKnnPCTree(query,static_cast<size_t>(k));
+        auto pq_pctree =hnsw.searchKnnPCTree(query,static_cast<size_t>(k),nullptr,&profiler);
         end =std::chrono::high_resolution_clock::now();
         time_pctree_ns += std::chrono::duration<double, std::nano>(end - start).count();
         std::vector<size_t> pctree_ids =extract_ids(pq_pctree, k);
@@ -459,7 +462,7 @@ int main(int argc, char** argv)
 
         // for vptree->hnsw(level-0)
         start =std::chrono::high_resolution_clock::now();
-        auto pq_vpt =hnsw.searchKnnVPTree(query,static_cast<size_t>(k));
+        auto pq_vpt =hnsw.searchKnnVPTree(query,static_cast<size_t>(k),nullptr,&profiler);
         end =std::chrono::high_resolution_clock::now();
         time_vpt_ns += std::chrono::duration<double, std::nano>(end - start).count();
         auto vpt_ids =extract_ids(pq_vpt, k);
@@ -513,7 +516,7 @@ int main(int argc, char** argv)
 
         // KMeansTree -> HNSW
         start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans =hnsw.searchKnnKMeansTree(query,static_cast<size_t>(k));
+        auto pq_kmeans =hnsw.searchKnnKMeansTree(query,static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_kmeans_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_ids =extract_ids(pq_kmeans, k);
@@ -653,13 +656,30 @@ int main(int argc, char** argv)
     const double speedup_vpt_finger_multi = avg_time_hnsw_us / avg_time_vpt_finger_multi_us;
     const double speedup_vpt_tri_multi = avg_time_hnsw_us / avg_time_vpt_tri_multi_us;
 
+
+
+    // Averaged profiling values for this ef_search value (us for CSV)
+    std::vector<double> avg_hnsw_level_time_us(profiler.hnswLevelTimeNs.size(), 0.0);
+    for (size_t lvl = 0; lvl < profiler.hnswLevelTimeNs.size(); ++lvl)
+    {
+        avg_hnsw_level_time_us[lvl] = (profiler.hnswLevelTimeNs[lvl] / Q) / 1000.0;
+    }
+    const double avg_hnsw_tri_level0_time_us    = (profiler.hnswTriLevel0TimeNs    / Q) / 1000.0;
+    const double avg_hnsw_finger_level0_time_us = (profiler.hnswFingerLevel0TimeNs / Q) / 1000.0;
+    const double avg_pctree_lookup_time_us      = (profiler.pctreeTimeNs          / Q) / 1000.0;
+    const double avg_mtree_lookup_time_us       = (profiler.mtreeTimeNs           / Q) / 1000.0;
+    const double avg_vptree_lookup_time_us      = (profiler.vptreeTimeNs          / Q) / 1000.0;
+    const double avg_kmeans_tree_lookup_time_us = (profiler.kmeansTreeTimeNs      / Q) / 1000.0;
+
+
+
     std::cout << "\nSIFT1M RESULTS\n";
     std::cout << "N=" << N << ", dim=" << dim<< ", k=" << k << ", ef=" << ef_search<< ", queries=" << Q << "\n\n";
 
     std::cout << std::fixed << std::setprecision(4);
 
-    auto print_result = [](const std::string& name, double recall,
-                           double latency_us, double speedup) {
+    auto print_result = [](const std::string& name, double recall,double latency_us, double speedup) 
+    {
         std::cout << std::left << std::setw(28) << name
                   << " Recall@" << std::setw(2) << "k=" << std::setw(8) << recall
                   << " Avg latency=" << std::setw(10) << std::setprecision(3)
@@ -699,10 +719,9 @@ int main(int argc, char** argv)
 
 
     // Append one result block for this ef_search value.
-    std::ofstream csv(csv_path,
-                      (ef_search == ef_search_values.front())
-                          ? std::ios::out
-                          : std::ios::app);
+    std::ofstream csv(csv_path,(ef_search == ef_search_values.front())? std::ios::out : std::ios::app);
+
+
     if (!csv) 
     {
         throw std::runtime_error("Cannot open " + csv_path + " for writing");
@@ -719,7 +738,17 @@ int main(int argc, char** argv)
             << "hnsw_build_sec,pctree_build_sec,mtree_build_sec,"
             << "vptree_build_sec,kmeans_build_sec,"
             << "finger_build_sec,tri_build_sec,recall_at_k,avg_latency_us,"
-            << "speedup_vs_hnsw,recall_loss_vs_hnsw\n";
+            << "speedup_vs_hnsw,recall_loss_vs_hnsw";
+        for (int lvl = 0; lvl < hnsw_num_levels; ++lvl)
+        {
+            csv << ",avg_hnsw_level_" << lvl << "_time_us";
+        }
+        csv << ",avg_hnsw_tri_level0_time_us"
+            << ",avg_hnsw_finger_level0_time_us"
+            << ",avg_pctree_lookup_time_us"
+            << ",avg_mtree_lookup_time_us"
+            << ",avg_vptree_lookup_time_us"
+            << ",avg_kmeans_tree_lookup_time_us\n";
     }
 
     auto write_row = [&](const std::string& method,double recall,double latency_us,double speedup)
@@ -758,7 +787,18 @@ int main(int argc, char** argv)
             << recall << ','
             << latency_us << ','
             << speedup << ','
-            << (avg_recall_hnsw - recall)
+            << (avg_recall_hnsw - recall);
+
+        for (int lvl = 0; lvl < hnsw_num_levels; ++lvl)
+        {
+            csv << ',' << avg_hnsw_level_time_us[lvl];
+        }
+        csv << ',' << avg_hnsw_tri_level0_time_us
+            << ',' << avg_hnsw_finger_level0_time_us
+            << ',' << avg_pctree_lookup_time_us
+            << ',' << avg_mtree_lookup_time_us
+            << ',' << avg_vptree_lookup_time_us
+            << ',' << avg_kmeans_tree_lookup_time_us
             << '\n';
     };
 

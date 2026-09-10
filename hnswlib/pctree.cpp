@@ -442,16 +442,12 @@ PCNode* PCTree::findLeaf(const float* query) const
     return current;
 }
 
-
-std::vector<int> PCTree::searchNN(const float* query) const
+int PCTree::searchNN(const float* query) const
 {
-    std::vector<int> representatives;
     PCNode* leaf = findLeaf(query);
-    if (leaf != nullptr && leaf->representative >= 0)
-    {
-        representatives.push_back(leaf->representative);
-    }
-    return representatives;
+    if (leaf == nullptr)
+        return -1;
+    return leaf->representative;
 }
 
 
