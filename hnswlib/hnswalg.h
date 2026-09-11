@@ -2428,6 +2428,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+        auto tree_start = std::chrono::high_resolution_clock::now();
         if (bare_bone_search) 
         {
             top_candidates = searchBaseLayerST<true>(currObj, query_data, max(ef_, k), isIdAllowed);
@@ -2448,11 +2449,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first, getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswLevel0_MTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
         return result;
     }
 
     // MTree - FINGER HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0) 
@@ -2475,11 +2481,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 }
             }
         }
-        return searchFromEntryPointFinger(currObj, query_data, k, isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result =  searchFromEntryPointFinger(currObj, query_data, k, isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswFingerLevel0_MTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
     // MTree - Tri HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnMTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnMTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -2508,12 +2521,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 }
             }
         }
-
-        return searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result = searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswTriLevel0_MTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
     // MTree -> HNSW Normal with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0)
@@ -2545,6 +2564,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+        auto tree_start = std::chrono::high_resolution_clock::now();
         if (bare_bone_search)
         {
             top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),isIdAllowed);
@@ -2561,11 +2581,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first,getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswLevel0MTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
         return result;
     }
 
     // MTree -> HNSW Finger with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -2599,11 +2624,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW Finger search using ALL selected entry points
-        return searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result = searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswFingerLevel0MTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
     // MTree -> HNSW Tri with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -2638,7 +2670,14 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW TRI search using ALL selected entry points
-        return searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result =  searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswTriLevel0MTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
 
@@ -2681,7 +2720,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
-
+        auto tree_start = std::chrono::high_resolution_clock::now();
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
         if (bare_bone_search) 
         {
@@ -2702,11 +2741,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first, getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswLevel0_VPTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
         return result;
     }
 
     // VPTree - FINGER HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnVPTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnVPTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0) 
@@ -2729,11 +2773,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 }
             }
         }
-        return searchFromEntryPointFinger(currObj, query_data, k, isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result = searchFromEntryPointFinger(currObj, query_data, k, isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswFingerLevel0_VPTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
     // VPTree - Tri HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnVPTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnVPTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
     {
 
         priority_queue<pair<dist_t, labeltype>> empty;
@@ -2762,12 +2813,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 }
             }
         }
-
-        return searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result = searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswTriLevel0_VPTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
     // VPTree -> HNSW Normal with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0)
@@ -2799,6 +2856,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+        auto tree_start = std::chrono::high_resolution_clock::now();
         if (bare_bone_search)
         {
             top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),isIdAllowed);
@@ -2815,11 +2873,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first,getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswLevel0VPTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
         return result;
     }
 
     // VPTree -> HNSW Finger with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -2853,11 +2916,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW Finger search using ALL selected entry points
-        return searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result = searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswFingerLevel0VPTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
     // VPTree -> HNSW Tri with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -2892,7 +2962,14 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW TRI search using ALL selected entry points
-        return searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result = searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswTriLevel0VPTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
 
@@ -2934,7 +3011,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
-
+        auto tree_start = std::chrono::high_resolution_clock::now();
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
         if (bare_bone_search) 
         {
@@ -2955,11 +3032,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first, getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswLevel0_PCTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
         return result;
     }
 
     // PCTree - FINGER HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnPCTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnPCTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0) 
@@ -2982,11 +3064,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 }
             }
         }
-        return searchFromEntryPointFinger(currObj, query_data, k, isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result=searchFromEntryPointFinger(currObj, query_data, k, isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswFingerLevel0_PCTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
     // PCTree - Tri HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnPCTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnPCTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
     {
 
         priority_queue<pair<dist_t, labeltype>> empty;
@@ -3020,25 +3109,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // TRI accelerated Level-0 search
-        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
-        top_candidates =searchBaseLayerTri(currObj,query_data,max(ef_, k),isIdAllowed);
-
-        // Keep only k results
-        while (top_candidates.size() > k)
-            top_candidates.pop();
-
-        while (!top_candidates.empty()) 
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result = searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
         {
-            pair<dist_t, tableint> rez =top_candidates.top();
-            empty.push(pair<dist_t, labeltype>(rez.first,getExternalLabel(rez.second)));
-            top_candidates.pop();
+            profiler->hnswTriLevel0_PCTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
         }
-
-        return empty;
+        return result;
     }
 
     // PCTree -> HNSW Normal with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0)
@@ -3070,6 +3152,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+        auto tree_start = std::chrono::high_resolution_clock::now();
         if (bare_bone_search)
         {
             top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),isIdAllowed);
@@ -3086,11 +3169,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first,getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswLevel0PCTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
         return result;
     }
 
     // PCTree -> HNSW Finger with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3124,11 +3212,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW Finger search using ALL selected entry points
-        return searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto  result = searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswFingerLevel0PCTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
     // PCTree -> HNSW Tri with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3163,7 +3258,14 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW TRI search using ALL selected entry points
-        return searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result =  searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswTriLevel0PCTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
 
@@ -3205,7 +3307,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
-
+        auto tree_start = std::chrono::high_resolution_clock::now();
         bool bare_bone_search =!num_deleted_ && !isIdAllowed;
 
         if (bare_bone_search)
@@ -3224,11 +3326,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first,getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswLevel0_KMeanTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
         return result;
     }
 
     // KMeansTree -> HNSW Finger with Single Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3254,11 +3361,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             }
         }
         // HNSW Finger search from selected entry point
-        return searchFromEntryPointFinger(currObj,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result = searchFromEntryPointFinger(currObj,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswFingerLevel0_KMeanTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
     
     // KMeansTree -> TRI with Single Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
 
@@ -3284,11 +3398,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             }
         }
         // HNSW TRI search from selected entry point
-        return searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result = searchFromEntryPointTri(currObj,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswTriLevel0_KMeanTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
     // KMeansTree -> HNSW Normal with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0)
@@ -3320,6 +3441,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+        auto tree_start = std::chrono::high_resolution_clock::now();
         if (bare_bone_search)
         {
             top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),isIdAllowed);
@@ -3336,11 +3458,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first,getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswLevel0KMeansTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
         return result;
     }
 
     // KMeansTree -> HNSW Finger with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3374,11 +3501,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW Finger search using ALL selected entry points
-        return searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result = searchFromEntryPointFingerMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswFingerLevel0KMeansTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
     // KMeansTree -> HNSW Tri with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3413,7 +3547,14 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW TRI search using ALL selected entry points
-        return searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        auto result = searchFromEntryPointTriMulti(entry_points,query_data,k,isIdAllowed);
+        auto tree_end = std::chrono::high_resolution_clock::now();
+        if (profiler != nullptr)
+        {
+            profiler->hnswTriLevel0KMeansTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        }
+        return result;
     }
 
 

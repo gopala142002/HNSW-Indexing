@@ -274,9 +274,6 @@ int main(int argc, char** argv)
     double total_recall_mtree_tri = 0.0;
     double total_recall_mtree = 0.0;
     double total_recall_mtree_finger = 0.0;
-    // double total_recall_vtree_tri = 0.0;
-    // double total_recall_vtree = 0.0;
-    // double total_recall_vtree_finger = 0.0;
     double total_recall_vpt_tri = 0.0;
     double total_recall_vpt=0.0;
     double total_recall_vpt_finger = 0.0;
@@ -309,9 +306,6 @@ int main(int argc, char** argv)
     double time_mtree_tri_ns = 0.0;
     double time_mtree_ns = 0.0;
     double time_mtree_finger_ns = 0.0;
-    // double time_vtree_tri_ns = 0.0;
-    // double time_vtree_ns = 0.0;
-    // double time_vtree_finger_ns = 0.0;
     double time_vpt_tri_ns = 0.0;
     double time_vpt_ns = 0.0;
     double time_vpt_finger_ns = 0.0;
@@ -378,7 +372,7 @@ int main(int argc, char** argv)
 
         // MTree -> TRI
         start = std::chrono::high_resolution_clock::now();
-        auto pq_mtree_tri = hnsw.searchKnnMTreeTri(query, static_cast<size_t>(k));
+        auto pq_mtree_tri = hnsw.searchKnnMTreeTri(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_mtree_tri_ns += std::chrono::duration<double, std::nano>(end-start).count();
         auto mtree_tri_ids = extract_ids(pq_mtree_tri, k);
@@ -387,7 +381,7 @@ int main(int argc, char** argv)
 
         // for mtree->(level-0 + finger optimization)
         start =std::chrono::high_resolution_clock::now();
-        auto pq_mtree_finger =hnsw.searchKnnMTreeFinger(query,static_cast<size_t>(k));
+        auto pq_mtree_finger =hnsw.searchKnnMTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler);
         end =std::chrono::high_resolution_clock::now();
         time_mtree_finger_ns += std::chrono::duration<double, std::nano>(end - start).count();
         auto mtree_finger_ids =extract_ids(pq_mtree_finger,k);
@@ -396,7 +390,7 @@ int main(int argc, char** argv)
 
         // MTree -> HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_mtree_multi =hnsw.searchKnnMTreeMulti(query, static_cast<size_t>(k));
+        auto pq_mtree_multi =hnsw.searchKnnMTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_mtree_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto mtree_multi_ids = extract_ids(pq_mtree_multi, k);
@@ -405,7 +399,7 @@ int main(int argc, char** argv)
 
         // MTree -> TRI HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_mtree_tri_multi =hnsw.searchKnnMTreeTriMulti(query, static_cast<size_t>(k));
+        auto pq_mtree_tri_multi =hnsw.searchKnnMTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_mtree_tri_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto mtree_tri_multi_ids = extract_ids(pq_mtree_tri_multi, k);
@@ -414,7 +408,7 @@ int main(int argc, char** argv)
 
         // MTree -> FINGER HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_mtree_finger_multi =hnsw.searchKnnMTreeFingerMulti(query, static_cast<size_t>(k));
+        auto pq_mtree_finger_multi =hnsw.searchKnnMTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_mtree_finger_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto mtree_finger_multi_ids =extract_ids(pq_mtree_finger_multi, k);
@@ -432,7 +426,7 @@ int main(int argc, char** argv)
 
         // PCTree -> TRI
         start = std::chrono::high_resolution_clock::now();
-        auto pq_pctree_tri = hnsw.searchKnnPCTreeTri(query, static_cast<size_t>(k));
+        auto pq_pctree_tri = hnsw.searchKnnPCTreeTri(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_pctree_tri_ns += std::chrono::duration<double, std::nano>(end-start).count();
         auto pctree_tri_ids = extract_ids(pq_pctree_tri, k);
@@ -441,7 +435,7 @@ int main(int argc, char** argv)
 
         // for pctree -> hnsw(level-0 + finger optimization)
         start =std::chrono::high_resolution_clock::now();
-        auto pq_pctree_finger =hnsw.searchKnnPCTreeFinger(query,static_cast<size_t>(k));
+        auto pq_pctree_finger =hnsw.searchKnnPCTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler);
         end =std::chrono::high_resolution_clock::now();
         time_pctree_finger_ns += std::chrono::duration<double, std::nano>(end - start).count();
         std::vector<size_t> pctree_finger_ids =extract_ids(pq_pctree_finger,k);
@@ -450,7 +444,7 @@ int main(int argc, char** argv)
 
         // PCTree -> HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_pctree_multi =hnsw.searchKnnPCTreeMulti(query, static_cast<size_t>(k));
+        auto pq_pctree_multi =hnsw.searchKnnPCTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_pctree_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto pctree_multi_ids = extract_ids(pq_pctree_multi, k);
@@ -459,7 +453,7 @@ int main(int argc, char** argv)
 
         // PCTree -> TRI HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_pctree_tri_multi =hnsw.searchKnnPCTreeTriMulti(query, static_cast<size_t>(k));
+        auto pq_pctree_tri_multi =hnsw.searchKnnPCTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_pctree_tri_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto pctree_tri_multi_ids = extract_ids(pq_pctree_tri_multi, k);
@@ -468,7 +462,7 @@ int main(int argc, char** argv)
 
         // PCTree -> FINGER HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_pctree_finger_multi =hnsw.searchKnnPCTreeFingerMulti(query, static_cast<size_t>(k));
+        auto pq_pctree_finger_multi =hnsw.searchKnnPCTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_pctree_finger_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto pctree_finger_multi_ids =extract_ids(pq_pctree_finger_multi, k);
@@ -486,16 +480,16 @@ int main(int argc, char** argv)
 
         // VPTree -> TRI
         start = std::chrono::high_resolution_clock::now();
-        auto pq_vpt_tri = hnsw.searchKnnVPTreeTri(query, static_cast<size_t>(k));
+        auto pq_vpt_tri = hnsw.searchKnnVPTreeTri(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_vpt_tri_ns += std::chrono::duration<double, std::nano>(end-start).count();
         auto vpt_tri_ids = extract_ids(pq_vpt_tri, k);
         total_recall_vpt_tri += recall_at_k(gt_q, gt_dim, vpt_tri_ids, k);
 
 
-        // for vptree->(level-0 + finer optimization)
+        // for vptree->(level-0 + finger optimization)
         start =std::chrono::high_resolution_clock::now();
-        auto pq_vpt_finger =hnsw.searchKnnVPTreeFinger(query,static_cast<size_t>(k));
+        auto pq_vpt_finger =hnsw.searchKnnVPTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler);
         end =std::chrono::high_resolution_clock::now();
         time_vpt_finger_ns += std::chrono::duration<double, std::nano>(end - start).count();
         auto vpt_finger_ids =extract_ids(pq_vpt_finger, k);
@@ -504,7 +498,7 @@ int main(int argc, char** argv)
 
         // VPTree -> HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_vpt_multi =hnsw.searchKnnVPTreeMulti(query, static_cast<size_t>(k));
+        auto pq_vpt_multi =hnsw.searchKnnVPTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_vpt_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto vpt_multi_ids = extract_ids(pq_vpt_multi, k);
@@ -513,7 +507,7 @@ int main(int argc, char** argv)
 
         // VPTree -> TRI HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_vpt_tri_multi =hnsw.searchKnnVPTreeTriMulti(query, static_cast<size_t>(k));
+        auto pq_vpt_tri_multi =hnsw.searchKnnVPTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_vpt_tri_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto vpt_tri_multi_ids = extract_ids(pq_vpt_tri_multi, k);
@@ -522,42 +516,12 @@ int main(int argc, char** argv)
 
         // VPTree -> FINGER HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_vpt_finger_multi =hnsw.searchKnnVPTreeFingerMulti(query, static_cast<size_t>(k));
+        auto pq_vpt_finger_multi =hnsw.searchKnnVPTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_vpt_finger_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto vpt_finger_multi_ids =extract_ids(pq_vpt_finger_multi, k);
         total_recall_vpt_finger_multi +=recall_at_k(gt_q, gt_dim, vpt_finger_multi_ids, k);
 
-
-
-        // VTree is not performing good for higher dimension
-
-        // for vtree->hnsw(level-0)
-        // start =std::chrono::high_resolution_clock::now();
-        // auto pq_vtree =hnsw.searchKnnVTree(query,static_cast<size_t>(k));
-        // end =std::chrono::high_resolution_clock::now();
-        // time_vtree_ns += std::chrono::duration<double, std::nano>(end - start).count();
-        // auto vtree_ids =extract_ids(pq_vtree, k);
-        // total_recall_vtree +=recall_at_k(gt_q,gt_dim,vtree_ids,k);
-
-
-        // VTree -> TRI
-        // start = std::chrono::high_resolution_clock::now();
-        // auto pq_vtree_tri = hnsw.searchKnnVTreeTri(query, static_cast<size_t>(k));
-        // end = std::chrono::high_resolution_clock::now();
-        // time_vtree_tri_ns += std::chrono::duration<double, std::nano>(end-start).count();
-        // auto vtree_tri_ids = extract_ids(pq_vtree_tri, k);
-        // total_recall_vtree_tri += recall_at_k(gt_q, gt_dim, vtree_tri_ids, k);
-
-
-        // for vtree->(level-0 + finer optimization)
-        // start =std::chrono::high_resolution_clock::now();
-        // auto pq_vtree_finger =hnsw.searchKnnVTreeFinger(query,static_cast<size_t>(k));
-        // end =std::chrono::high_resolution_clock::now();
-        // time_vtree_finger_ns += std::chrono::duration<double, std::nano>(end - start).count();
-        // auto vtree_finger_ids =extract_ids(pq_vtree_finger,k);
-        // total_recall_vtree_finger +=recall_at_k(gt_q,gt_dim,vtree_finger_ids,k);
-        
 
         // KMeansTree -> HNSW
         start = std::chrono::high_resolution_clock::now();
@@ -570,7 +534,7 @@ int main(int argc, char** argv)
 
         // KMeansTree -> TRI HNSW
         start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans_tri =hnsw.searchKnnKMeansTreeTri(query,static_cast<size_t>(k));
+        auto pq_kmeans_tri =hnsw.searchKnnKMeansTreeTri(query,static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_kmeans_tri_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_tri_ids =extract_ids(pq_kmeans_tri, k);
@@ -579,7 +543,7 @@ int main(int argc, char** argv)
 
         // KMeansTree -> finger HNSW
         start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans_finger =hnsw.searchKnnKMeansTreeFinger(query,static_cast<size_t>(k));
+        auto pq_kmeans_finger =hnsw.searchKnnKMeansTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_kmeans_finger_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_finger_ids =extract_ids(pq_kmeans_finger, k);
@@ -588,7 +552,7 @@ int main(int argc, char** argv)
 
         // KMeansTree -> HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans_multi =hnsw.searchKnnKMeansTreeMulti(query, static_cast<size_t>(k));
+        auto pq_kmeans_multi =hnsw.searchKnnKMeansTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_kmeans_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_multi_ids = extract_ids(pq_kmeans_multi, k);
@@ -596,7 +560,7 @@ int main(int argc, char** argv)
 
         // KMeansTree -> TRI HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans_tri_multi =hnsw.searchKnnKMeansTreeTriMulti(query, static_cast<size_t>(k));
+        auto pq_kmeans_tri_multi =hnsw.searchKnnKMeansTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_kmeans_tri_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_tri_multi_ids = extract_ids(pq_kmeans_tri_multi, k);
@@ -605,7 +569,7 @@ int main(int argc, char** argv)
 
         // KMeansTree -> FINGER HNSW Multi
         start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans_finger_multi =hnsw.searchKnnKMeansTreeFingerMulti(query, static_cast<size_t>(k));
+        auto pq_kmeans_finger_multi =hnsw.searchKnnKMeansTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler);
         end = std::chrono::high_resolution_clock::now();
         time_kmeans_finger_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_finger_multi_ids =extract_ids(pq_kmeans_finger_multi, k);
@@ -627,9 +591,6 @@ int main(int argc, char** argv)
     const double avg_recall_mtree_tri = total_recall_mtree_tri / Q;
     const double avg_recall_mtree = total_recall_mtree / Q;
     const double avg_recall_mtree_finger = total_recall_mtree_finger / Q;
-    // const double avg_recall_vtree_tri = total_recall_vtree_tri / Q;
-    // const double avg_recall_vtree = total_recall_vtree / Q;
-    // const double avg_recall_vtree_finger = total_recall_vtree_finger / Q;
     const double avg_recall_vpt_tri = total_recall_vpt_tri / Q;
     const double avg_recall_vpt = total_recall_vpt / Q;
     const double avg_recall_vpt_finger = total_recall_vpt_finger / Q;
@@ -651,68 +612,92 @@ int main(int argc, char** argv)
 
 
 
-    const double avg_time_hnsw_us = (time_hnsw_ns / Q) / 1000.0;
-    const double avg_time_hnsw_finger_us = (time_hnsw_finger_ns / Q) / 1000.0;
-    const double avg_time_pctree_us = (time_pctree_ns / Q) / 1000.0;
-    const double avg_time_pctree_finger_us = (time_pctree_finger_ns / Q) / 1000.0;
-    const double avg_time_pctree_tri_us = (time_pctree_tri_ns / Q) / 1000.0;
-    const double avg_time_hnsw_tri_us = (time_hnsw_tri_ns / Q) / 1000.0;
-    const double avg_time_mtree_tri_us = (time_mtree_tri_ns / Q) / 1000.0;
-    const double avg_time_mtree_us = (time_mtree_ns / Q) / 1000.0;
-    const double avg_time_mtree_finger_us = (time_mtree_finger_ns / Q) / 1000.0;
-    // const double avg_time_vtree_tri_us = (time_vtree_tri_ns / Q) / 1000.0;
-    // const double avg_time_vtree_us = (time_vtree_ns / Q) / 1000.0;
-    // const double avg_time_vtree_finger_us = (time_vtree_finger_ns / Q) / 1000.0;
-    const double avg_time_vpt_tri_us = (time_vpt_tri_ns / Q) / 1000.0;
-    const double avg_time_vpt_us = (time_vpt_ns / Q) / 1000.0;
-    const double avg_time_vpt_finger_us = (time_vpt_finger_ns / Q) / 1000.0;
-    const double avg_time_kmeans_us =(time_kmeans_ns / Q) / 1000.0;
-    const double avg_time_kmeans_finger_us =(time_kmeans_finger_ns / Q) / 1000.0;
-    const double avg_time_kmeans_tri_us =(time_kmeans_tri_ns / Q) / 1000.0;
-    const double avg_time_kmeans_multi_us = (time_kmeans_multi_ns / Q) / 1000.0;
-    const double avg_time_kmeans_finger_multi_us = (time_kmeans_finger_multi_ns / Q) / 1000.0;
-    const double avg_time_kmeans_tri_multi_us = (time_kmeans_tri_multi_ns / Q) / 1000.0;
-    const double avg_time_pctree_multi_us = (time_pctree_multi_ns / Q) / 1000.0;
-    const double avg_time_pctree_finger_multi_us = (time_pctree_finger_multi_ns / Q) / 1000.0;
-    const double avg_time_pctree_tri_multi_us = (time_pctree_tri_multi_ns / Q) / 1000.0;
-    const double avg_time_mtree_multi_us = (time_mtree_multi_ns / Q) / 1000.0;
-    const double avg_time_mtree_finger_multi_us = (time_mtree_finger_multi_ns / Q) / 1000.0;
-    const double avg_time_mtree_tri_multi_us = (time_mtree_tri_multi_ns / Q) / 1000.0;
-    const double avg_time_vpt_multi_us = (time_vpt_multi_ns / Q) / 1000.0;
-    const double avg_time_vpt_finger_multi_us = (time_vpt_finger_multi_ns / Q) / 1000.0;
-    const double avg_time_vpt_tri_multi_us = (time_vpt_tri_multi_ns / Q) / 1000.0;
+    // Per-method latency in NANOSECONDS (no /1000 conversion).
+    const double avg_time_hnsw_ns = time_hnsw_ns / Q;
+    const double avg_time_hnsw_finger_ns = time_hnsw_finger_ns / Q;
+    const double avg_time_pctree_ns = time_pctree_ns / Q;
+    const double avg_time_pctree_finger_ns = time_pctree_finger_ns / Q;
+    const double avg_time_pctree_tri_ns = time_pctree_tri_ns / Q;
+    const double avg_time_hnsw_tri_ns = time_hnsw_tri_ns / Q;
+    const double avg_time_mtree_tri_ns = time_mtree_tri_ns / Q;
+    const double avg_time_mtree_ns = time_mtree_ns / Q;
+    const double avg_time_mtree_finger_ns = time_mtree_finger_ns / Q;
+    const double avg_time_vpt_tri_ns = time_vpt_tri_ns / Q;
+    const double avg_time_vpt_ns = time_vpt_ns / Q;
+    const double avg_time_vpt_finger_ns = time_vpt_finger_ns / Q;
+    const double avg_time_kmeans_ns = time_kmeans_ns / Q;
+    const double avg_time_kmeans_finger_ns = time_kmeans_finger_ns / Q;
+    const double avg_time_kmeans_tri_ns = time_kmeans_tri_ns / Q;
+    const double avg_time_kmeans_multi_ns = time_kmeans_multi_ns / Q;
+    const double avg_time_kmeans_finger_multi_ns = time_kmeans_finger_multi_ns / Q;
+    const double avg_time_kmeans_tri_multi_ns = time_kmeans_tri_multi_ns / Q;
+    const double avg_time_pctree_multi_ns = time_pctree_multi_ns / Q;
+    const double avg_time_pctree_finger_multi_ns = time_pctree_finger_multi_ns / Q;
+    const double avg_time_pctree_tri_multi_ns = time_pctree_tri_multi_ns / Q;
+    const double avg_time_mtree_multi_ns = time_mtree_multi_ns / Q;
+    const double avg_time_mtree_finger_multi_ns = time_mtree_finger_multi_ns / Q;
+    const double avg_time_mtree_tri_multi_ns = time_mtree_tri_multi_ns / Q;
+    const double avg_time_vpt_multi_ns = time_vpt_multi_ns / Q;
+    const double avg_time_vpt_finger_multi_ns = time_vpt_finger_multi_ns / Q;
+    const double avg_time_vpt_tri_multi_ns = time_vpt_tri_multi_ns / Q;
+
+    // Microsecond versions kept only for the human-readable console printout.
+    const double avg_time_hnsw_us = avg_time_hnsw_ns / 1000.0;
+    const double avg_time_hnsw_finger_us = avg_time_hnsw_finger_ns / 1000.0;
+    const double avg_time_pctree_us = avg_time_pctree_ns / 1000.0;
+    const double avg_time_pctree_finger_us = avg_time_pctree_finger_ns / 1000.0;
+    const double avg_time_pctree_tri_us = avg_time_pctree_tri_ns / 1000.0;
+    const double avg_time_hnsw_tri_us = avg_time_hnsw_tri_ns / 1000.0;
+    const double avg_time_mtree_tri_us = avg_time_mtree_tri_ns / 1000.0;
+    const double avg_time_mtree_us = avg_time_mtree_ns / 1000.0;
+    const double avg_time_mtree_finger_us = avg_time_mtree_finger_ns / 1000.0;
+    const double avg_time_vpt_tri_us = avg_time_vpt_tri_ns / 1000.0;
+    const double avg_time_vpt_us = avg_time_vpt_ns / 1000.0;
+    const double avg_time_vpt_finger_us = avg_time_vpt_finger_ns / 1000.0;
+    const double avg_time_kmeans_us = avg_time_kmeans_ns / 1000.0;
+    const double avg_time_kmeans_finger_us = avg_time_kmeans_finger_ns / 1000.0;
+    const double avg_time_kmeans_tri_us = avg_time_kmeans_tri_ns / 1000.0;
+    const double avg_time_kmeans_multi_us = avg_time_kmeans_multi_ns / 1000.0;
+    const double avg_time_kmeans_finger_multi_us = avg_time_kmeans_finger_multi_ns / 1000.0;
+    const double avg_time_kmeans_tri_multi_us = avg_time_kmeans_tri_multi_ns / 1000.0;
+    const double avg_time_pctree_multi_us = avg_time_pctree_multi_ns / 1000.0;
+    const double avg_time_pctree_finger_multi_us = avg_time_pctree_finger_multi_ns / 1000.0;
+    const double avg_time_pctree_tri_multi_us = avg_time_pctree_tri_multi_ns / 1000.0;
+    const double avg_time_mtree_multi_us = avg_time_mtree_multi_ns / 1000.0;
+    const double avg_time_mtree_finger_multi_us = avg_time_mtree_finger_multi_ns / 1000.0;
+    const double avg_time_mtree_tri_multi_us = avg_time_mtree_tri_multi_ns / 1000.0;
+    const double avg_time_vpt_multi_us = avg_time_vpt_multi_ns / 1000.0;
+    const double avg_time_vpt_finger_multi_us = avg_time_vpt_finger_multi_ns / 1000.0;
+    const double avg_time_vpt_tri_multi_us = avg_time_vpt_tri_multi_ns / 1000.0;
 
 
 
-    const double speedup_pctree = avg_time_hnsw_us / avg_time_pctree_us;
-    const double speedup_hnsw_finger = avg_time_hnsw_us / avg_time_hnsw_finger_us;
-    const double speedup_pctree_finger = avg_time_hnsw_us / avg_time_pctree_finger_us;
-    const double speedup_pctree_tri = avg_time_hnsw_us / avg_time_pctree_tri_us;
-    const double speedup_hnsw_tri = avg_time_hnsw_us / avg_time_hnsw_tri_us;
-    const double speedup_mtree_tri = avg_time_hnsw_us / avg_time_mtree_tri_us;
-    const double speedup_mtree = avg_time_hnsw_us / avg_time_mtree_us;
-    const double speedup_mtree_finger = avg_time_hnsw_us / avg_time_mtree_finger_us;
-    // const double speedup_vtree_tri = avg_time_hnsw_us / avg_time_vtree_tri_us;
-    // const double speedup_vtree = avg_time_hnsw_us / avg_time_vtree_us;
-    // const double speedup_vtree_finger = avg_time_hnsw_us / avg_time_vtree_finger_us;
-    const double speedup_vpt_tri = avg_time_hnsw_us / avg_time_vpt_tri_us;
-    const double speedup_vpt = avg_time_hnsw_us / avg_time_vpt_us;
-    const double speedup_vpt_finger = avg_time_hnsw_us / avg_time_vpt_finger_us;
-    const double speedup_kmeans =avg_time_hnsw_us / avg_time_kmeans_us;
-    const double speedup_kmeans_finger =avg_time_hnsw_us / avg_time_kmeans_finger_us;
-    const double speedup_kmeans_tri =avg_time_hnsw_us / avg_time_kmeans_tri_us;
-    const double speedup_kmeans_multi =avg_time_hnsw_us / avg_time_kmeans_multi_us;
-    const double speedup_kmeans_finger_multi =avg_time_hnsw_us / avg_time_kmeans_finger_multi_us;
-    const double speedup_kmeans_tri_multi = avg_time_hnsw_us / avg_time_kmeans_tri_multi_us;
-    const double speedup_pctree_multi = avg_time_hnsw_us / avg_time_pctree_multi_us;
-    const double speedup_pctree_finger_multi = avg_time_hnsw_us / avg_time_pctree_finger_multi_us;
-    const double speedup_pctree_tri_multi = avg_time_hnsw_us / avg_time_pctree_tri_multi_us;
-    const double speedup_mtree_multi = avg_time_hnsw_us / avg_time_mtree_multi_us;
-    const double speedup_mtree_finger_multi = avg_time_hnsw_us / avg_time_mtree_finger_multi_us;
-    const double speedup_mtree_tri_multi = avg_time_hnsw_us / avg_time_mtree_tri_multi_us;
-    const double speedup_vpt_multi = avg_time_hnsw_us / avg_time_vpt_multi_us;
-    const double speedup_vpt_finger_multi = avg_time_hnsw_us / avg_time_vpt_finger_multi_us;
-    const double speedup_vpt_tri_multi = avg_time_hnsw_us / avg_time_vpt_tri_multi_us;
+    const double speedup_pctree = avg_time_hnsw_ns / avg_time_pctree_ns;
+    const double speedup_hnsw_finger = avg_time_hnsw_ns / avg_time_hnsw_finger_ns;
+    const double speedup_pctree_finger = avg_time_hnsw_ns / avg_time_pctree_finger_ns;
+    const double speedup_pctree_tri = avg_time_hnsw_ns / avg_time_pctree_tri_ns;
+    const double speedup_hnsw_tri = avg_time_hnsw_ns / avg_time_hnsw_tri_ns;
+    const double speedup_mtree_tri = avg_time_hnsw_ns / avg_time_mtree_tri_ns;
+    const double speedup_mtree = avg_time_hnsw_ns / avg_time_mtree_ns;
+    const double speedup_mtree_finger = avg_time_hnsw_ns / avg_time_mtree_finger_ns;
+    const double speedup_vpt_tri = avg_time_hnsw_ns / avg_time_vpt_tri_ns;
+    const double speedup_vpt = avg_time_hnsw_ns / avg_time_vpt_ns;
+    const double speedup_vpt_finger = avg_time_hnsw_ns / avg_time_vpt_finger_ns;
+    const double speedup_kmeans = avg_time_hnsw_ns / avg_time_kmeans_ns;
+    const double speedup_kmeans_finger = avg_time_hnsw_ns / avg_time_kmeans_finger_ns;
+    const double speedup_kmeans_tri = avg_time_hnsw_ns / avg_time_kmeans_tri_ns;
+    const double speedup_kmeans_multi = avg_time_hnsw_ns / avg_time_kmeans_multi_ns;
+    const double speedup_kmeans_finger_multi = avg_time_hnsw_ns / avg_time_kmeans_finger_multi_ns;
+    const double speedup_kmeans_tri_multi = avg_time_hnsw_ns / avg_time_kmeans_tri_multi_ns;
+    const double speedup_pctree_multi = avg_time_hnsw_ns / avg_time_pctree_multi_ns;
+    const double speedup_pctree_finger_multi = avg_time_hnsw_ns / avg_time_pctree_finger_multi_ns;
+    const double speedup_pctree_tri_multi = avg_time_hnsw_ns / avg_time_pctree_tri_multi_ns;
+    const double speedup_mtree_multi = avg_time_hnsw_ns / avg_time_mtree_multi_ns;
+    const double speedup_mtree_finger_multi = avg_time_hnsw_ns / avg_time_mtree_finger_multi_ns;
+    const double speedup_mtree_tri_multi = avg_time_hnsw_ns / avg_time_mtree_tri_multi_ns;
+    const double speedup_vpt_multi = avg_time_hnsw_ns / avg_time_vpt_multi_ns;
+    const double speedup_vpt_finger_multi = avg_time_hnsw_ns / avg_time_vpt_finger_multi_ns;
+    const double speedup_vpt_tri_multi = avg_time_hnsw_ns / avg_time_vpt_tri_multi_ns;
 
     std::cout << "\nSIFT1M RESULTS\n";
     std::cout << "N=" << N << ", dim=" << dim<< ", k=" << k << ", ef=" << ef_search<< ", queries=" << Q << "\n\n";
@@ -751,9 +736,6 @@ int main(int argc, char** argv)
     print_result("VPTree -> HNSW Multi",avg_recall_vpt_multi,avg_time_vpt_multi_us,speedup_vpt_multi);
     print_result("VPTree -> TRI Multi",avg_recall_vpt_tri_multi,avg_time_vpt_tri_multi_us,speedup_vpt_tri_multi);
     print_result("VPTree -> FINGER Multi",avg_recall_vpt_finger_multi,avg_time_vpt_finger_multi_us,speedup_vpt_finger_multi);
-    // print_result("VTree -> HNSW",avg_recall_vtree,avg_time_vtree_us,speedup_vtree);
-    // print_result("VTree -> TRI",avg_recall_vtree_tri,avg_time_vtree_tri_us,speedup_vtree_tri);
-    // print_result("VTree -> FINGER",avg_recall_vtree_finger,avg_time_vtree_finger_us,speedup_vtree_finger);
     print_result("KMeansTree -> HNSW",avg_recall_kmeans,avg_time_kmeans_us,speedup_kmeans);
     print_result("KMeansTree -> TRI",avg_recall_kmeans_tri,avg_time_kmeans_tri_us,speedup_kmeans_tri);
     print_result("KMeansTree -> FINGER",avg_recall_kmeans_finger,avg_time_kmeans_finger_us,speedup_kmeans_finger);
@@ -762,7 +744,8 @@ int main(int argc, char** argv)
     print_result("KMeansTree -> FINGER Multi",avg_recall_kmeans_finger_multi,avg_time_kmeans_finger_multi_us,speedup_kmeans_finger_multi);
 
 
-    // One summary row per search method. This file is overwritten on every run.
+    // One summary row per search method, single CSV, this file is overwritten on every run.
+    // All timing values below are stored in NANOSECONDS.
     const std::string csv_path = "hnsw_results_sift.csv";
     std::ofstream csv(csv_path);
     if (!csv) 
@@ -776,33 +759,54 @@ int main(int argc, char** argv)
     << "pctree_partitions,pctree_leaf_clusters,mtree_pivots,mtree_leaf_clusters,vpt_leaf_clusters,"
     << "kmeans_clusters,kmeans_leaf_clusters,"
     << "hnsw_num_levels,pctree_height,mtree_height,vptree_height,"
-    // << "vtree_height,
     << "kmeans_height,"
     << "hnsw_build_sec,pctree_build_sec,mtree_build_sec,"
     << "vptree_build_sec,"
-    // <<"vtree_build_sec,"
     << "kmeans_build_sec,"
-    << "finger_build_sec,tri_build_sec,recall_at_k,avg_latency_us,"
+    << "finger_build_sec,tri_build_sec,recall_at_k,avg_latency_ns,"
     << "speedup_vs_hnsw,recall_loss_vs_hnsw";
     for (int lvl = 0; lvl < hnsw_num_levels; ++lvl)
     {
-        csv << ",avg_hnsw_level_" << lvl << "_time_us";
+        csv << ",avg_hnsw_level_" << lvl << "_time_ns";
     }
-    csv << ",avg_hnsw_tri_level0_time_us"
-        << ",avg_hnsw_finger_level0_time_us"
-        << ",avg_pctree_lookup_time_us"
-        << ",avg_mtree_lookup_time_us"
-        << ",avg_vptree_lookup_time_us"
-        << ",avg_kmeans_tree_lookup_time_us\n";
+    csv << ",avg_hnsw_tri_level0_time_ns"
+        << ",avg_hnsw_finger_level0_time_ns"
+        << ",avg_pctree_lookup_time_ns"
+        << ",avg_mtree_lookup_time_ns"
+        << ",avg_vptree_lookup_time_ns"
+        << ",avg_kmeans_tree_lookup_time_ns"
+        << ",avg_hnswLevel0_PCTree_ns"
+        << ",avg_hnswLevel0_MTree_ns"
+        << ",avg_hnswLevel0_VPTree_ns"
+        << ",avg_hnswLevel0_KMeanTree_ns"
+        << ",avg_hnswTriLevel0_PCTree_ns"
+        << ",avg_hnswTriLevel0_MTree_ns"
+        << ",avg_hnswTriLevel0_VPTree_ns"
+        << ",avg_hnswTriLevel0_KMeanTree_ns"
+        << ",avg_hnswFingerLevel0_PCTree_ns"
+        << ",avg_hnswFingerLevel0_MTree_ns"
+        << ",avg_hnswFingerLevel0_VPTree_ns"
+        << ",avg_hnswFingerLevel0_KMeanTree_ns"
+        << ",avg_hnswLevel0PCTreeMulti_ns"
+        << ",avg_hnswFingerLevel0PCTreeMulti_ns"
+        << ",avg_hnswTriLevel0PCTreeMulti_ns"
+        << ",avg_hnswLevel0MTreeMulti_ns"
+        << ",avg_hnswFingerLevel0MTreeMulti_ns"
+        << ",avg_hnswTriLevel0MTreeMulti_ns"
+        << ",avg_hnswLevel0VPTreeMulti_ns"
+        << ",avg_hnswFingerLevel0VPTreeMulti_ns"
+        << ",avg_hnswTriLevel0VPTreeMulti_ns"
+        << ",avg_hnswLevel0KMeansTreeMulti_ns"
+        << ",avg_hnswFingerLevel0KMeansTreeMulti_ns"
+        << ",avg_hnswTriLevel0KMeansTreeMulti_ns\n";
 
 
-     //Averaged profiling values 
+
+     //Averaged profiling values, stored in nanoseconds
     std::vector<double> avg_hnsw_level_time_ns(profiler.hnswLevelTimeNs.size(), 0.0);
-    std::vector<double> avg_hnsw_level_time_us(profiler.hnswLevelTimeNs.size(), 0.0);
     for (size_t lvl = 0; lvl < profiler.hnswLevelTimeNs.size(); ++lvl)
     {
         avg_hnsw_level_time_ns[lvl] = profiler.hnswLevelTimeNs[lvl] / Q;
-        avg_hnsw_level_time_us[lvl] = avg_hnsw_level_time_ns[lvl] / 1000.0;
     }
 
     const double avg_hnsw_tri_level0_ns    = profiler.hnswTriLevel0TimeNs    / Q;
@@ -812,15 +816,40 @@ int main(int argc, char** argv)
     const double avg_vptree_lookup_ns      = profiler.vptreeTimeNs          / Q;
     const double avg_kmeans_lookup_ns      = profiler.kmeansTreeTimeNs      / Q;
 
-    const double avg_hnsw_tri_level0_time_us    = avg_hnsw_tri_level0_ns    / 1000.0;
-    const double avg_hnsw_finger_level0_time_us = avg_hnsw_finger_level0_ns / 1000.0;
-    const double avg_pctree_lookup_time_us      = avg_pctree_lookup_ns      / 1000.0;
-    const double avg_mtree_lookup_time_us       = avg_mtree_lookup_ns       / 1000.0;
-    const double avg_vptree_lookup_time_us      = avg_vptree_lookup_ns      / 1000.0;
-    const double avg_kmeans_tree_lookup_time_us = avg_kmeans_lookup_ns      / 1000.0;
+
+    const double avg_hnswLevel0_PCTree_ns     = profiler.hnswLevel0_PCTree  /Q;
+    const double avg_hnswLevel0_MTree_ns      = profiler.hnswLevel0_MTree  /Q;
+    const double avg_hnswLevel0_VPTree_ns     = profiler.hnswLevel0_VPTree /Q;
+    const double avg_hnswLevel0_KMeanTree_ns  = profiler.hnswLevel0_KMeanTree  /Q;
+
+    const double avg_hnswTriLevel0_PCTree_ns      = profiler.hnswTriLevel0_PCTree  /Q;
+    const double avg_hnswTriLevel0_MTree_ns       = profiler.hnswTriLevel0_MTree   /Q;
+    const double avg_hnswTriLevel0_VPTree_ns      = profiler.hnswTriLevel0_VPTree  /Q;
+    const double avg_hnswTriLevel0_KMeanTree_ns   = profiler.hnswTriLevel0_KMeanTree   /Q;
+
+    const double avg_hnswFingerLevel0_PCTree_ns    = profiler.hnswFingerLevel0_PCTree   /Q;
+    const double avg_hnswFingerLevel0_MTree_ns     = profiler.hnswFingerLevel0_MTree    /Q;
+    const double avg_hnswFingerLevel0_VPTree_ns    = profiler.hnswFingerLevel0_VPTree   /Q;
+    const double avg_hnswFingerLevel0_KMeanTree_ns = profiler.hnswFingerLevel0_KMeanTree   /Q;
+
+    const double avg_hnswLevel0PCTreeMulti_ns        = profiler.hnswLevel0PCTreeMulti   /Q;
+    const double avg_hnswFingerLevel0PCTreeMulti_ns  = profiler.hnswFingerLevel0PCTreeMulti   /Q;
+    const double avg_hnswTriLevel0PCTreeMulti_ns     = profiler.hnswTriLevel0PCTreeMulti /Q;
+
+    const double avg_hnswLevel0MTreeMulti_ns        = profiler.hnswLevel0MTreeMulti   /Q;
+    const double avg_hnswFingerLevel0MTreeMulti_ns  = profiler.hnswFingerLevel0MTreeMulti   /Q;
+    const double avg_hnswTriLevel0MTreeMulti_ns       = profiler.hnswTriLevel0MTreeMulti /Q;
+
+    const double avg_hnswLevel0VPTreeMulti_ns        = profiler.hnswLevel0VPTreeMulti   /Q;
+    const double avg_hnswFingerLevel0VPTreeMulti_ns  = profiler.hnswFingerLevel0VPTreeMulti   /Q;
+    const double avg_hnswTriLevel0VPTreeMulti_ns       = profiler.hnswTriLevel0VPTreeMulti /Q;
+
+    const double avg_hnswLevel0KMeansTreeMulti_ns        = profiler.hnswLevel0KMeansTreeMulti   /Q;
+    const double avg_hnswFingerLevel0KMeansTreeMulti_ns  = profiler.hnswFingerLevel0KMeansTreeMulti   /Q;
+    const double avg_hnswTriLevel0KMeansTreeMulti_ns       = profiler.hnswTriLevel0KMeansTreeMulti /Q;
 
     
-    auto write_row = [&](const std::string& method,double recall,double latency_us,double speedup)
+    auto write_row = [&](const std::string& method,double recall,double latency_ns,double speedup)
     {
         csv << std::setprecision(10)
             << method << ','
@@ -854,58 +883,78 @@ int main(int argc, char** argv)
             << finger_build_sec << ','
             << tri_build_sec << ','
             << recall << ','
-            << latency_us << ','
+            << latency_ns << ','
             << speedup << ','
             << (avg_recall_hnsw - recall);
 
         for (int lvl = 0; lvl < hnsw_num_levels; ++lvl)
         {
-            csv << ',' << avg_hnsw_level_time_us[lvl];
+            csv << ',' << avg_hnsw_level_time_ns[lvl];
         }
-        csv << ',' << avg_hnsw_tri_level0_time_us
-            << ',' << avg_hnsw_finger_level0_time_us
-            << ',' << avg_pctree_lookup_time_us
-            << ',' << avg_mtree_lookup_time_us
-            << ',' << avg_vptree_lookup_time_us
-            << ',' << avg_kmeans_tree_lookup_time_us
+        csv << ',' << avg_hnsw_tri_level0_ns
+            << ',' << avg_hnsw_finger_level0_ns
+            << ',' << avg_pctree_lookup_ns
+            << ',' << avg_mtree_lookup_ns
+            << ',' << avg_vptree_lookup_ns
+            << ',' << avg_kmeans_lookup_ns
+            << ',' << avg_hnswLevel0_PCTree_ns
+            << ',' << avg_hnswLevel0_MTree_ns
+            << ',' << avg_hnswLevel0_VPTree_ns
+            << ',' << avg_hnswLevel0_KMeanTree_ns
+            << ',' << avg_hnswTriLevel0_PCTree_ns
+            << ',' << avg_hnswTriLevel0_MTree_ns
+            << ',' << avg_hnswTriLevel0_VPTree_ns
+            << ',' << avg_hnswTriLevel0_KMeanTree_ns
+            << ',' << avg_hnswFingerLevel0_PCTree_ns
+            << ',' << avg_hnswFingerLevel0_MTree_ns
+            << ',' << avg_hnswFingerLevel0_VPTree_ns
+            << ',' << avg_hnswFingerLevel0_KMeanTree_ns
+            << ',' << avg_hnswLevel0PCTreeMulti_ns
+            << ',' << avg_hnswFingerLevel0PCTreeMulti_ns
+            << ',' << avg_hnswTriLevel0PCTreeMulti_ns
+            << ',' << avg_hnswLevel0MTreeMulti_ns
+            << ',' << avg_hnswFingerLevel0MTreeMulti_ns
+            << ',' << avg_hnswTriLevel0MTreeMulti_ns
+            << ',' << avg_hnswLevel0VPTreeMulti_ns
+            << ',' << avg_hnswFingerLevel0VPTreeMulti_ns
+            << ',' << avg_hnswTriLevel0VPTreeMulti_ns
+            << ',' << avg_hnswLevel0KMeansTreeMulti_ns
+            << ',' << avg_hnswFingerLevel0KMeansTreeMulti_ns
+            << ',' << avg_hnswTriLevel0KMeansTreeMulti_ns
             << '\n';
     };
     
-    write_row("Normal HNSW", avg_recall_hnsw, avg_time_hnsw_us, 1.0);
-    write_row("HNSW -> TRI", avg_recall_hnsw_tri, avg_time_hnsw_tri_us, speedup_hnsw_tri);
-    write_row("HNSW + FINGER", avg_recall_hnsw_finger, avg_time_hnsw_finger_us, speedup_hnsw_finger);
+    write_row("Normal HNSW", avg_recall_hnsw, avg_time_hnsw_ns, 1.0);
+    write_row("HNSW -> TRI", avg_recall_hnsw_tri, avg_time_hnsw_tri_ns, speedup_hnsw_tri);
+    write_row("HNSW + FINGER", avg_recall_hnsw_finger, avg_time_hnsw_finger_ns, speedup_hnsw_finger);
 
-    write_row("MTree -> HNSW", avg_recall_mtree, avg_time_mtree_us, speedup_mtree);
-    write_row("MTree -> TRI", avg_recall_mtree_tri, avg_time_mtree_tri_us, speedup_mtree_tri);
-    write_row("MTree -> FINGER", avg_recall_mtree_finger, avg_time_mtree_finger_us, speedup_mtree_finger);
-    write_row("MTree -> HNSW Multi", avg_recall_mtree_multi, avg_time_mtree_multi_us, speedup_mtree_multi);
-    write_row("MTree -> TRI Multi", avg_recall_mtree_tri_multi, avg_time_mtree_tri_multi_us, speedup_mtree_tri_multi);
-    write_row("MTree -> FINGER Multi", avg_recall_mtree_finger_multi, avg_time_mtree_finger_multi_us, speedup_mtree_finger_multi);
+    write_row("MTree -> HNSW", avg_recall_mtree, avg_time_mtree_ns, speedup_mtree);
+    write_row("MTree -> TRI", avg_recall_mtree_tri, avg_time_mtree_tri_ns, speedup_mtree_tri);
+    write_row("MTree -> FINGER", avg_recall_mtree_finger, avg_time_mtree_finger_ns, speedup_mtree_finger);
+    write_row("MTree -> HNSW Multi", avg_recall_mtree_multi, avg_time_mtree_multi_ns, speedup_mtree_multi);
+    write_row("MTree -> TRI Multi", avg_recall_mtree_tri_multi, avg_time_mtree_tri_multi_ns, speedup_mtree_tri_multi);
+    write_row("MTree -> FINGER Multi", avg_recall_mtree_finger_multi, avg_time_mtree_finger_multi_ns, speedup_mtree_finger_multi);
 
-    write_row("PCTree -> HNSW", avg_recall_pctree, avg_time_pctree_us, speedup_pctree);
-    write_row("PCTree -> TRI", avg_recall_pctree_tri, avg_time_pctree_tri_us, speedup_pctree_tri);
-    write_row("PCTree -> FINGER", avg_recall_pctree_finger, avg_time_pctree_finger_us, speedup_pctree_finger);
-    write_row("PCTree -> HNSW Multi", avg_recall_pctree_multi, avg_time_pctree_multi_us, speedup_pctree_multi);
-    write_row("PCTree -> TRI Multi", avg_recall_pctree_tri_multi, avg_time_pctree_tri_multi_us, speedup_pctree_tri_multi);
-    write_row("PCTree -> FINGER Multi", avg_recall_pctree_finger_multi, avg_time_pctree_finger_multi_us, speedup_pctree_finger_multi);
+    write_row("PCTree -> HNSW", avg_recall_pctree, avg_time_pctree_ns, speedup_pctree);
+    write_row("PCTree -> TRI", avg_recall_pctree_tri, avg_time_pctree_tri_ns, speedup_pctree_tri);
+    write_row("PCTree -> FINGER", avg_recall_pctree_finger, avg_time_pctree_finger_ns, speedup_pctree_finger);
+    write_row("PCTree -> HNSW Multi", avg_recall_pctree_multi, avg_time_pctree_multi_ns, speedup_pctree_multi);
+    write_row("PCTree -> TRI Multi", avg_recall_pctree_tri_multi, avg_time_pctree_tri_multi_ns, speedup_pctree_tri_multi);
+    write_row("PCTree -> FINGER Multi", avg_recall_pctree_finger_multi, avg_time_pctree_finger_multi_ns, speedup_pctree_finger_multi);
 
-    write_row("VPTree -> HNSW", avg_recall_vpt, avg_time_vpt_us, speedup_vpt);
-    write_row("VPTree -> TRI", avg_recall_vpt_tri, avg_time_vpt_tri_us, speedup_vpt_tri);
-    write_row("VPTree -> FINGER", avg_recall_vpt_finger, avg_time_vpt_finger_us, speedup_vpt_finger);
-    write_row("VPTree -> HNSW Multi", avg_recall_vpt_multi, avg_time_vpt_multi_us, speedup_vpt_multi);
-    write_row("VPTree -> TRI Multi", avg_recall_vpt_tri_multi, avg_time_vpt_tri_multi_us, speedup_vpt_tri_multi);
-    write_row("VPTree -> FINGER Multi", avg_recall_vpt_finger_multi, avg_time_vpt_finger_multi_us, speedup_vpt_finger_multi);
+    write_row("VPTree -> HNSW", avg_recall_vpt, avg_time_vpt_ns, speedup_vpt);
+    write_row("VPTree -> TRI", avg_recall_vpt_tri, avg_time_vpt_tri_ns, speedup_vpt_tri);
+    write_row("VPTree -> FINGER", avg_recall_vpt_finger, avg_time_vpt_finger_ns, speedup_vpt_finger);
+    write_row("VPTree -> HNSW Multi", avg_recall_vpt_multi, avg_time_vpt_multi_ns, speedup_vpt_multi);
+    write_row("VPTree -> TRI Multi", avg_recall_vpt_tri_multi, avg_time_vpt_tri_multi_ns, speedup_vpt_tri_multi);
+    write_row("VPTree -> FINGER Multi", avg_recall_vpt_finger_multi, avg_time_vpt_finger_multi_ns, speedup_vpt_finger_multi);
 
-    // write_row("VTree -> HNSW", avg_recall_vtree, avg_time_vtree_us, speedup_vtree);
-    // write_row("VTree -> TRI", avg_recall_vtree_tri, avg_time_vtree_tri_us, speedup_vtree_tri);
-    // write_row("VTree -> FINGER", avg_recall_vtree_finger, avg_time_vtree_finger_us, speedup_vtree_finger);
-
-    write_row("KMeansTree -> HNSW",avg_recall_kmeans,avg_time_kmeans_us,speedup_kmeans);
-    write_row("KMeansTree -> TRI",avg_recall_kmeans_tri,avg_time_kmeans_tri_us,speedup_kmeans_tri);
-    write_row("KMeansTree -> FINGER",avg_recall_kmeans_finger,avg_time_kmeans_finger_us,speedup_kmeans_finger);
-    write_row("KMeansTree -> HNSW Multi",avg_recall_kmeans_multi,avg_time_kmeans_multi_us,speedup_kmeans_multi);
-    write_row("KMeansTree -> TRI Multi",avg_recall_kmeans_tri_multi,avg_time_kmeans_tri_multi_us,speedup_kmeans_tri_multi);
-    write_row("KMeansTree -> FINGER Multi",avg_recall_kmeans_finger_multi,avg_time_kmeans_finger_multi_us,speedup_kmeans_finger_multi);
+    write_row("KMeansTree -> HNSW", avg_recall_kmeans, avg_time_kmeans_ns, speedup_kmeans);
+    write_row("KMeansTree -> TRI", avg_recall_kmeans_tri, avg_time_kmeans_tri_ns, speedup_kmeans_tri);
+    write_row("KMeansTree -> FINGER", avg_recall_kmeans_finger, avg_time_kmeans_finger_ns, speedup_kmeans_finger);
+    write_row("KMeansTree -> HNSW Multi", avg_recall_kmeans_multi, avg_time_kmeans_multi_ns, speedup_kmeans_multi);
+    write_row("KMeansTree -> TRI Multi", avg_recall_kmeans_tri_multi, avg_time_kmeans_tri_multi_ns, speedup_kmeans_tri_multi);
+    write_row("KMeansTree -> FINGER Multi", avg_recall_kmeans_finger_multi, avg_time_kmeans_finger_multi_ns, speedup_kmeans_finger_multi);
 
     csv.close();
 
