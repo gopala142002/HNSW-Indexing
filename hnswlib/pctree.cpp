@@ -479,3 +479,30 @@ int PCTree::getHeight() const
 {
     return getHeight(root);
 }
+
+size_t PCTree::nodeMemoryUsage(const PCNode* node) const
+{
+    if (!node) return 0;
+
+    size_t total = sizeof(PCNode);
+
+    total += node->principalComponent.capacity() * sizeof(float);
+    total += node->splitPoints.capacity() * sizeof(float);
+    total += node->children.capacity() * sizeof(PCNode*);
+    total += node->vectorIndices.capacity() * sizeof(int);
+    total += node->leafClusterRepresentatives.capacity() * sizeof(int);
+
+    total += node->leafClusterCentroids.capacity() * sizeof(std::vector<float>);
+    for (const auto& centroid : node->leafClusterCentroids)
+        total += centroid.capacity() * sizeof(float);
+
+    for (const PCNode* child : node->children)
+        total += nodeMemoryUsage(child);
+
+    return total;
+}
+
+size_t PCTree::memoryUsageBytes() const
+{
+    return nodeMemoryUsage(root) + sizeof(PCTree);
+}

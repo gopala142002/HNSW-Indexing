@@ -50,7 +50,7 @@ class KMeansTree
     int getHeight() const;
     KMeansNode* root = nullptr;
     
-
+    size_t memoryUsageBytes() const;
 
     private:
     const char* data_level0_memory;
@@ -81,4 +81,5 @@ class KMeansTree
     KMeansNode* buildRecursive(std::vector<int>&& vectorIndices);
     void populateLeaf(KMeansNode* node) const;
     int calculateHeight(KMeansNode* node) const;
+    size_t nodeMemoryUsage(const KMeansNode* node) const;
 };

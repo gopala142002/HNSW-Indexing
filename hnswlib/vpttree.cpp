@@ -531,3 +531,26 @@ int VantagePointTree::calculateHeight(VPTNode* node) const
 
     return 1 + std::max(leftHeight, rightHeight);
 }
+size_t VantagePointTree::nodeMemoryUsage(const VPTNode* node) const
+{
+    if (!node) return 0;
+
+    size_t total = sizeof(VPTNode);
+
+    total += node->vectorIndices.capacity() * sizeof(int);
+    total += node->leafClusterRepresentatives.capacity() * sizeof(int);
+
+    total += node->leafClusterCentroids.capacity() * sizeof(std::vector<float>);
+    for (const auto& c : node->leafClusterCentroids)
+        total += c.capacity() * sizeof(float);
+
+    total += nodeMemoryUsage(node->left);
+    total += nodeMemoryUsage(node->right);
+
+    return total;
+}
+
+size_t VantagePointTree::memoryUsageBytes() const
+{
+    return nodeMemoryUsage(root) + sizeof(VantagePointTree);
+}

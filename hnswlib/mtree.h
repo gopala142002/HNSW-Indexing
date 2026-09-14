@@ -61,6 +61,8 @@ class MTree
 
         MTNode* root = nullptr;
 
+        size_t memoryUsageBytes() const;
+
     private:
         char* data_level0_memory;
         size_t data_size;
@@ -105,4 +107,6 @@ class MTree
         void initializeLeafCentroids(const std::vector<int>& vectorIndices,int k,std::vector<std::vector<float>>& centroids) const;
         void runLeafKMeans(const std::vector<int>& vectorIndices,std::vector<std::vector<float>>& centroids,std::vector<std::vector<int>>& clusters) const;
         void populateLeafMulti(MTNode* node);
+
+        size_t nodeMemoryUsage(const MTNode* node) const;
 };

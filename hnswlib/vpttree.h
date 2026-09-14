@@ -44,6 +44,9 @@ class VantagePointTree
     std::vector<int> searchEntryPointMulti(const float* query) const;
 
     VPTNode* root = nullptr;
+    size_t memoryUsageBytes() const;
+
+
     private:
     char* data_level0_memory;
     size_t data_size;
@@ -71,4 +74,5 @@ class VantagePointTree
     void initializeLeafCentroids(const std::vector<int>& vectorIndices,int k,std::vector<std::vector<float>>& centroids) const;
     void runLeafKMeans(const std::vector<int>& vectorIndices,std::vector<std::vector<float>>& centroids,std::vector<std::vector<int>>& clusters) const;
     void populateLeafMulti(VPTNode* node);
+    size_t nodeMemoryUsage(const VPTNode* node) const;
 };

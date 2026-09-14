@@ -256,6 +256,57 @@ int main(int argc, char** argv)
     auto t_tri_end = std::chrono::high_resolution_clock::now();
     double tri_build_sec = std::chrono::duration<double>(t_tri_end - t_tri_start).count();
     std::cout << "TRI structures built in " << std::fixed << std::setprecision(2) << tri_build_sec << " s.\n\n";
+
+
+    // ---------------------------------------------------------------------
+    // MEMORY ACCOUNTING: exact structural byte counts for every structure
+    // built above. Computed directly from live allocation sizes / container
+    // capacities (see hnswalg.h), not sampled via OS-level RSS.
+    // ---------------------------------------------------------------------
+    std::cout << "Computing memory usage...\n";
+    const size_t hnsw_base_bytes   = hnsw.getHNSWBaseMemoryBytes();
+    const size_t finger_only_bytes = hnsw.getFingerMemoryBytes();
+    const size_t tri_only_bytes    = hnsw.getTriMemoryBytes();
+    const size_t hnsw_finger_bytes = hnsw_base_bytes + finger_only_bytes;
+    const size_t hnsw_tri_bytes    = hnsw_base_bytes + tri_only_bytes;
+    const size_t mtree_mem_bytes   = hnsw.getMTreeMemoryBytes();
+    const size_t pctree_mem_bytes  = hnsw.getPCTreeMemoryBytes();
+    const size_t vpt_mem_bytes     = hnsw.getVPTreeMemoryBytes();
+    const size_t kmeans_mem_bytes  = hnsw.getKMeansTreeMemoryBytes();
+
+    const std::string memory_csv_path = "hnsw_memory_sift.csv";
+    std::ofstream memory_csv(memory_csv_path);
+    if (!memory_csv)
+    {
+        throw std::runtime_error("Cannot open " + memory_csv_path + " for writing");
+    }
+
+    memory_csv << "structure,memory_bytes\n";
+    auto write_memory_row = [&](const std::string& name, size_t bytes)
+    {
+        memory_csv << name << ',' << bytes << '\n';
+    };
+
+    write_memory_row("Normal HNSW", hnsw_base_bytes);
+    write_memory_row("HNSW + FINGER", hnsw_finger_bytes);
+    write_memory_row("HNSW + TRI", hnsw_tri_bytes);
+    write_memory_row("MTree", mtree_mem_bytes);
+    write_memory_row("PCTree", pctree_mem_bytes);
+    write_memory_row("VPTree", vpt_mem_bytes);
+    write_memory_row("KMeansTree", kmeans_mem_bytes);
+
+    memory_csv.close();
+
+    std::cout << "Memory CSV written to: " << memory_csv_path << "\n";
+    std::cout << "  Normal HNSW    = " << hnsw_base_bytes   << " bytes\n";
+    std::cout << "  HNSW + FINGER  = " << hnsw_finger_bytes << " bytes\n";
+    std::cout << "  HNSW + TRI     = " << hnsw_tri_bytes    << " bytes\n";
+    std::cout << "  MTree          = " << mtree_mem_bytes   << " bytes\n";
+    std::cout << "  PCTree         = " << pctree_mem_bytes  << " bytes\n";
+    std::cout << "  VPTree         = " << vpt_mem_bytes     << " bytes\n";
+    std::cout << "  KMeansTree     = " << kmeans_mem_bytes  << " bytes\n\n";
+
+
     std::cout<< "Running "<< Q<< " queries (k="<< k<< ", ef="<< ef_search<< ")...\n\n";
 
 

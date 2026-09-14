@@ -535,6 +535,113 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         return (kmeanstree_ != nullptr)? kmeanstree_->getHeight(): -1;
     }
 
+    // -----------------------------------------------------------------
+    // Memory accounting
+    // -----------------------------------------------------------------
+    // Exact, structural byte accounting for every structure built on top
+    // of (or alongside) the base HNSW graph. These are computed directly
+    // from live allocation sizes / container capacities, not sampled via
+    // OS-level RSS, so the numbers are deterministic and repeatable.
+
+    // MTree / PCTree / VPTree / KMeansTree: simply forward to the memory
+    // walk already implemented on each tree class.
+    size_t getMTreeMemoryBytes() const
+    {
+        return (mtree_ != nullptr) ? mtree_->memoryUsageBytes() : 0;
+    }
+
+    size_t getPCTreeMemoryBytes() const
+    {
+        return (pctree_ != nullptr) ? pctree_->memoryUsageBytes() : 0;
+    }
+
+    size_t getVPTreeMemoryBytes() const
+    {
+        return (vpt_ != nullptr) ? vpt_->memoryUsageBytes() : 0;
+    }
+
+    size_t getKMeansTreeMemoryBytes() const
+    {
+        return (kmeanstree_ != nullptr) ? kmeanstree_->memoryUsageBytes() : 0;
+    }
+
+    // Core HNSW graph memory: the flat level-0 buffer (vectors + labels +
+    // level-0 links) plus every higher-level link list, plus the small
+    // amount of bookkeeping (locks, label lookup) that HierarchicalNSW
+    // itself carries. The higher-level link-list walk mirrors the exact
+    // same accounting already used by indexFileSize()/saveIndex().
+    size_t getHNSWBaseMemoryBytes() const
+    {
+        // Flat level-0 buffer: vector data + level-0 links + labels,
+        // one slot per element up to max_elements_ (the true malloc size).
+        size_t core_bytes = max_elements_ * size_data_per_element_;
+
+        // Pointer table for higher-level link lists.
+        core_bytes += max_elements_ * sizeof(char*);
+
+        // Higher-level link lists themselves: only elements that were
+        // actually assigned a level above 0 have an allocated buffer.
+        for (size_t i = 0; i < cur_element_count; ++i)
+        {
+            if (element_levels_[i] > 0)
+                core_bytes += size_links_per_element_ * element_levels_[i];
+        }
+
+        // element_levels_ bookkeeping vector.
+        core_bytes += element_levels_.capacity() * sizeof(int);
+
+        // Auxiliary bookkeeping: per-element/per-label locks and the
+        // label -> internal-id lookup table. Kept as a clearly separate
+        // addend so it can be dropped from the total if a "graph storage
+        // only" number is wanted instead.
+        size_t auxiliary_bytes = 0;
+        auxiliary_bytes += link_list_locks_.size() * sizeof(mutex);
+        auxiliary_bytes += label_op_locks_.size() * sizeof(mutex);
+
+        // unordered_map byte accounting is allocator-dependent; approximate
+        // each entry as the stored pair plus a small fixed per-node/bucket
+        // overhead (next-pointer + cached hash), typical for libstdc++.
+        static constexpr size_t kHashNodeOverhead = 16;
+        auxiliary_bytes += label_lookup_.size() *
+            (sizeof(std::pair<const labeltype, tableint>) + kHashNodeOverhead);
+
+        return core_bytes + auxiliary_bytes;
+    }
+
+    // FINGER-specific memory: the shared projection/global data plus the
+    // per-element FingerNodeData entries (each itself variable-length,
+    // sized by that element's level-0 degree).
+    size_t getFingerMemoryBytes() const
+    {
+        if (!use_finger_)
+            return 0;
+
+        size_t total = 0;
+
+        total += finger_global_.projection.capacity() * sizeof(float);
+        total += finger_global_.point_projection.capacity() * sizeof(float);
+        total += finger_global_.point_norm_sq.capacity() * sizeof(float);
+
+        total += finger_data_.capacity() * sizeof(FingerNodeData);
+        for (const auto& node : finger_data_)
+        {
+            total += node.neighbor_coeffs.capacity() * sizeof(float);
+            total += node.residual_norms.capacity() * sizeof(float);
+            total += node.neighbor_center_coeffs.capacity() * sizeof(float);
+        }
+
+        return total;
+    }
+
+    // TRI-specific memory: the single flat edge-distance table.
+    size_t getTriMemoryBytes() const
+    {
+        if (!tri_ready_)
+            return 0;
+
+        return tri_edge_distances_.capacity() * sizeof(dist_t);
+    }
+
     
     ~HierarchicalNSW() 
     {

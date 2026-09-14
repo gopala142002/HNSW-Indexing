@@ -409,3 +409,33 @@ int KMeansTree::getHeight() const
 {
     return calculateHeight(root);
 }
+
+size_t KMeansTree::nodeMemoryUsage(const KMeansNode* node) const
+{
+    if (!node) return 0;
+
+    size_t total = sizeof(KMeansNode);
+
+    // centroids: vector<vector<float>> holding this node's cluster centers
+    total += node->centroids.capacity() * sizeof(std::vector<float>);
+    for (const auto& c : node->centroids)
+        total += c.capacity() * sizeof(float);
+
+    total += node->vectorIndices.capacity() * sizeof(int);
+    total += node->leafCentroid.capacity() * sizeof(float);
+    total += node->leafClusterRepresentatives.capacity() * sizeof(int);
+
+    total += node->leafClusterCentroids.capacity() * sizeof(std::vector<float>);
+    for (const auto& c : node->leafClusterCentroids)
+        total += c.capacity() * sizeof(float);
+
+    for (const KMeansNode* child : node->children)
+        total += nodeMemoryUsage(child);
+
+    return total;
+}
+
+size_t KMeansTree::memoryUsageBytes() const
+{
+    return nodeMemoryUsage(root) + sizeof(KMeansTree);
+}

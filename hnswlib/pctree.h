@@ -87,6 +87,9 @@ class PCTree
             }
             return result;
         }
+
+        size_t nodeMemoryUsage(const PCNode* node) const;
+        
     public:
         PCTree(const char* data_level0_memory, size_t data_size, size_t dim,size_t num_vectors, int leafCapacity,int numPartitions,int leafClusters);
         ~PCTree();
@@ -94,4 +97,5 @@ class PCTree
         std::vector<int> searchNNMulti(const float* query) const;
         int getHeight(PCNode* root) const;
         int getHeight() const;
+        size_t memoryUsageBytes() const;
 };

@@ -777,3 +777,29 @@ void MTree::preprocessLeafEntryPoints(MTNode* node)
         preprocessLeafEntryPoints(entry.child);
     }
 }
+
+
+size_t MTree::nodeMemoryUsage(const MTNode* node) const
+{
+    if (!node) return 0;
+
+    size_t total = sizeof(MTNode);
+
+    total += node->routingEntries.capacity() * sizeof(RoutingEntry);
+    total += node->objectEntries.capacity() * sizeof(ObjectEntry);
+    total += node->leafClusterRepresentatives.capacity() * sizeof(int);
+
+    total += node->leafClusterCentroids.capacity() * sizeof(std::vector<float>);
+    for (const auto& centroid : node->leafClusterCentroids)
+        total += centroid.capacity() * sizeof(float);
+
+    for (const auto& entry : node->routingEntries)
+        total += nodeMemoryUsage(entry.child);
+
+    return total;
+}
+
+size_t MTree::memoryUsageBytes() const
+{
+    return nodeMemoryUsage(root) + sizeof(MTree);
+}
