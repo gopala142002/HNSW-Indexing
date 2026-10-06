@@ -45,6 +45,7 @@ class KMeansTree
     KMeansTree(const KMeansTree&) = delete;
     KMeansTree& operator=(const KMeansTree&) = delete;
     void build();
+    void recomputeLeafClusters(int leafClusters);
     int searchNN(const float* query) const;
     std::vector<int> searchNNMulti(const float* query) const;
     int getHeight() const;

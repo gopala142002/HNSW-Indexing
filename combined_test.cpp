@@ -258,11 +258,10 @@ int main(int argc, char** argv)
     std::cout << "TRI structures built in " << std::fixed << std::setprecision(2) << tri_build_sec << " s.\n\n";
 
 
-    // ---------------------------------------------------------------------
+   
     // MEMORY ACCOUNTING: exact structural byte counts for every structure
     // built above. Computed directly from live allocation sizes / container
     // capacities (see hnswalg.h), not sampled via OS-level RSS.
-    // ---------------------------------------------------------------------
     std::cout << "Computing memory usage...\n";
     const size_t hnsw_base_bytes   = hnsw.getHNSWBaseMemoryBytes();
     const size_t finger_only_bytes = hnsw.getFingerMemoryBytes();
@@ -274,7 +273,7 @@ int main(int argc, char** argv)
     const size_t vpt_mem_bytes     = hnsw.getVPTreeMemoryBytes();
     const size_t kmeans_mem_bytes  = hnsw.getKMeansTreeMemoryBytes();
 
-    const std::string memory_csv_path = "hnsw_memory_sift.csv";
+    const std::string memory_csv_path = "hnsw_memory_gist.csv";
     std::ofstream memory_csv(memory_csv_path);
     if (!memory_csv)
     {
@@ -750,7 +749,7 @@ int main(int argc, char** argv)
     const double speedup_vpt_finger_multi = avg_time_hnsw_ns / avg_time_vpt_finger_multi_ns;
     const double speedup_vpt_tri_multi = avg_time_hnsw_ns / avg_time_vpt_tri_multi_ns;
 
-    std::cout << "\nSIFT1M RESULTS\n";
+    std::cout << "\nGIST RESULTS\n";
     std::cout << "N=" << N << ", dim=" << dim<< ", k=" << k << ", ef=" << ef_search<< ", queries=" << Q << "\n\n";
 
     std::cout << std::fixed << std::setprecision(4);
@@ -797,7 +796,7 @@ int main(int argc, char** argv)
 
     // One summary row per search method, single CSV, this file is overwritten on every run.
     // All timing values below are stored in NANOSECONDS.
-    const std::string csv_path = "hnsw_results_sift.csv";
+    const std::string csv_path = "hnsw_results_gist.csv";
     std::ofstream csv(csv_path);
     if (!csv) 
     {

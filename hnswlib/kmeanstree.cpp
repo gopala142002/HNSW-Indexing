@@ -5,7 +5,7 @@
 #include <numeric>
 #include <random>
 #include <stdexcept>
-
+#include <functional>
 
 KMeansTree::KMeansTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t num_vectors,int numClusters,int leafCapacity,int leafClusters)
 {
@@ -404,6 +404,32 @@ int KMeansTree::calculateHeight(KMeansNode* node) const
     }
     return 1 + height;
 }
+
+void KMeansTree::recomputeLeafClusters(int newLeafClusters)
+{
+    if (newLeafClusters < 1)
+        newLeafClusters = 1;
+
+    this->leafClusters = newLeafClusters;
+    std::function<void(KMeansNode*)> recompute = [&](KMeansNode* node)
+    {
+        if (node == nullptr)
+            return;
+
+        if (node->isLeaf)
+        {
+            if (!node->vectorIndices.empty())
+                populateLeaf(node);
+
+            return;
+        }
+
+        for (KMeansNode* child : node->children)
+            recompute(child);
+    };
+    recompute(root);
+}
+
 
 int KMeansTree::getHeight() const
 {

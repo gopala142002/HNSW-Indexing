@@ -37,7 +37,7 @@ class VantagePointTree
     VantagePointTree& operator=(const VantagePointTree&) = delete;
 
     void build();
-
+    void recomputeLeafClusters(int leafClusters);
     std::vector<int> searchNN(const float* query) const;
     int getHeight() const;
     int searchEntryPoint(const float* query) const;

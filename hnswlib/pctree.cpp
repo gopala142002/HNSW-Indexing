@@ -1,12 +1,11 @@
 #include "pctree.h"
-
 #include <cstring>
 #include <cmath>
 #include <algorithm>
 #include <numeric>
 #include <queue>
 #include <stdexcept>
-
+#include <functional>
 
 PCTree::PCTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t num_vectors,int leafCapacity,int numPartitions,int leafClusters)
 {
@@ -54,6 +53,33 @@ PCTree::~PCTree()
     delete root;
 }
 
+void PCTree::recomputeLeafClusters(int newLeafClusters)
+{
+    if (newLeafClusters < 1)
+        newLeafClusters = 1;
+
+    this->leafClusters = newLeafClusters;
+
+    std::function<void(PCNode*)> recompute =
+        [&](PCNode* node)
+    {
+        if (node == nullptr)
+            return;
+
+        if (node->isLeaf)
+        {
+            if (!node->vectorIndices.empty())
+                populateLeaf(node);
+
+            return;
+        }
+
+        for (PCNode* child : node->children)
+            recompute(child);
+    };
+
+    recompute(root);
+}
 
 std::vector<float> PCTree::computeCentroid(const std::vector<int>& vectorIndices)
 {

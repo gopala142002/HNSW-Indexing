@@ -4,7 +4,7 @@
 #include <numeric>
 #include <random>
 #include <stdexcept>
-
+#include <functional>
 
 VPTNode::~VPTNode() 
 {
@@ -82,6 +82,34 @@ void VantagePointTree::build()
 
     root = buildRecursive(std::move(allIndices));
     preprocessLeafEntryPoints(root);
+}
+
+void VantagePointTree::recomputeLeafClusters(int newLeafClusters)
+{
+    if (newLeafClusters < 1)
+        newLeafClusters = 1;
+
+    this->leafClusters = newLeafClusters;
+
+    std::function<void(VPTNode*)> recompute =
+        [&](VPTNode* node)
+    {
+        if (node == nullptr)
+            return;
+
+        if (node->isLeaf)
+        {
+            if (!node->vectorIndices.empty())
+                populateLeafMulti(node);
+
+            return;
+        }
+
+        recompute(node->left);
+        recompute(node->right);
+    };
+
+    recompute(root);
 }
 
 VPTNode* VantagePointTree::buildRecursive(std::vector<int>&& indices) 

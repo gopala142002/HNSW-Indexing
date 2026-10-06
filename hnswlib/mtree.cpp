@@ -1,8 +1,10 @@
 #include "mtree.h"
 #include <algorithm>
+#include <functional>
 #include <limits>
 #include <stdexcept>
 #include <vector>
+
 
 MTNode::~MTNode() 
 {
@@ -778,6 +780,30 @@ void MTree::preprocessLeafEntryPoints(MTNode* node)
     }
 }
 
+void MTree::recomputeLeafClusters(int newLeafClusters)
+{
+    if (newLeafClusters < 1)
+        newLeafClusters = 1;
+
+    this->leafClusters = newLeafClusters;
+
+    std::function<void(MTNode*)> recompute = [&](MTNode* node)
+    {
+        if (node == nullptr)
+            return;
+        if (node->isLeaf)
+        {
+            if (!node->objectEntries.empty())
+                populateLeafMulti(node);
+
+            return;
+        }
+
+        for (RoutingEntry& entry : node->routingEntries)
+            recompute(entry.child);
+    };
+    recompute(root);
+}
 
 size_t MTree::nodeMemoryUsage(const MTNode* node) const
 {

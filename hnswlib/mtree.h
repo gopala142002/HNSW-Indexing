@@ -59,6 +59,8 @@ class MTree
         std::vector<int> searchEntryPointMulti(const float* query) const;
         int getHeight() const;
 
+        void recomputeLeafClusters(int leafClusters);
+
         MTNode* root = nullptr;
 
         size_t memoryUsageBytes() const;

@@ -482,6 +482,21 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         kmeanstree_->build();
     }
 
+    void recomputeAllLeafClusters(int leafClusters)
+    {
+        if (mtree_ != nullptr)
+            mtree_->recomputeLeafClusters(leafClusters);
+
+        if (pctree_ != nullptr)
+            pctree_->recomputeLeafClusters(leafClusters);
+
+        if (vpt_ != nullptr)
+            vpt_->recomputeLeafClusters(leafClusters);
+
+        if (kmeanstree_ != nullptr)
+            kmeanstree_->recomputeLeafClusters(leafClusters);
+    }
+
     // Tri-Scheme precomputation
     void buildTriDistances() 
     {
@@ -669,6 +684,8 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
         free(linkLists_);
         linkLists_ = nullptr;
+        tri_edge_distances_.clear();
+        tri_ready_ = false;
         cur_element_count = 0;
         visited_list_pool_.reset(nullptr);
     }
@@ -1188,92 +1205,88 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // TRIANGLE-ACCELERATED BASE LAYER SEARCH
-    priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst>searchBaseLayerTri(tableint ep_id,const void *query_data,size_t ef,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst>searchBaseLayerTri(tableint ep_id,const void *query_data,size_t ef,BaseFilterFunctor* isIdAllowed = nullptr) const
     {
-
-        if (!tri_ready_) 
+        if (!tri_ready_)
         {
-            throw runtime_error(
-                "TRI search requested before buildTriDistances().");
+            throw runtime_error("TRI search requested before buildTriDistances().");
         }
-
         VisitedList *vl = visited_list_pool_->getFreeVisitedList();
         vl_type *visited_array = vl->mass;
         vl_type visited_array_tag = vl->curV;
-
-        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
-
-        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> candidate_set;
-
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst>top_candidates;
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst>candidate_set;
         // Distance from query to entry point
-        dist_t ep_dist =fstdistfunc_(query_data,getDataByInternalId(ep_id),dist_func_param_);
-
+        dist_t ep_dist = fstdistfunc_(query_data,getDataByInternalId(ep_id),dist_func_param_);
         dist_t lowerBound = ep_dist;
-
         top_candidates.emplace(ep_dist, ep_id);
         candidate_set.emplace(-ep_dist, ep_id);
-
         visited_array[ep_id] = visited_array_tag;
-
-        while (!candidate_set.empty()) 
+        while (!candidate_set.empty())
         {
-            pair<dist_t, tableint> current_node_pair =candidate_set.top();
-
-            dist_t candidate_dist =-current_node_pair.first;
-
+            pair<dist_t, tableint> current_node_pair = candidate_set.top();
+            dist_t candidate_dist = -current_node_pair.first;
             // Standard HNSW termination condition
-            if (candidate_dist > lowerBound && top_candidates.size() == ef) 
+            if (candidate_dist > lowerBound && top_candidates.size() == ef)
             {
                 break;
             }
-
             candidate_set.pop();
+            tableint curr_node = current_node_pair.second;
+            int *data = (int *)get_linklist0(curr_node);
+            size_t size = getListCount((linklistsizeint*)data);
 
-            tableint curr_node =current_node_pair.second;
-
-            int *data =(int *) get_linklist0(curr_node);
-
-            size_t size =getListCount((linklistsizeint*)data);
+            // d_qc = squared distance(q, curr_node)
             dist_t d_qc = candidate_dist;
 
-            for (size_t j = 0; j < size; ++j) 
+            // Convert to Euclidean distance once for this curr_node.
+            // This is required because fstdistfunc_ returns squared L2.
+            dist_t sqrt_qc = std::sqrt(d_qc);
+            for (size_t j = 0; j < size; ++j)
             {
                 tableint cand_id = *(data + j + 1);
-                if (visited_array[cand_id] == visited_array_tag) 
+                if (visited_array[cand_id] == visited_array_tag)
+                {
+                    continue;
+                }
+                visited_array[cand_id] = visited_array_tag;
+                // d_cc = squared distance(curr_node, cand_id)
+                dist_t d_cc = tri_edge_distances_[static_cast<size_t>(curr_node) * maxM0_ + j];
+
+                // Convert edge distance to Euclidean distance.
+                dist_t sqrt_cc = std::sqrt(d_cc);
+
+                // Valid triangle-inequality lower bound for squared L2:
+                // ||q - cand||^2 >= (||q - curr|| - ||curr - cand||)^2
+
+                dist_t diff = sqrt_qc - sqrt_cc;
+                dist_t tri_lb = diff * diff;
+
+                // TRI pruning
+                if (top_candidates.size() >= ef && tri_lb >= lowerBound)
                 {
                     continue;
                 }
 
-                visited_array[cand_id] =visited_array_tag;
+                // Exact squared-L2 distance
+                dist_t dist = fstdistfunc_(query_data,getDataByInternalId(cand_id),dist_func_param_);
 
-                dist_t d_cc =tri_edge_distances_[static_cast<size_t>(curr_node) * maxM0_ + j];
-
-                dist_t tri_lb = std::fabs(d_qc - d_cc);
-
-                if (top_candidates.size() >= ef &&tri_lb >= lowerBound) 
+                if (top_candidates.size() < ef ||lowerBound > dist)
                 {
-                    continue;
-                }
-                dist_t dist =fstdistfunc_(query_data,getDataByInternalId(cand_id),dist_func_param_);
-
-                if (top_candidates.size() < ef ||lowerBound > dist) 
-                {
-                    candidate_set.emplace(-dist,cand_id);
-                    if (!isMarkedDeleted(cand_id) &&(!isIdAllowed ||(*isIdAllowed)(getExternalLabel(cand_id)))) 
+                    candidate_set.emplace(-dist, cand_id);
+                    if (!isMarkedDeleted(cand_id) && (!isIdAllowed || (*isIdAllowed)( getExternalLabel(cand_id))))
                     {
-                        top_candidates.emplace(dist,cand_id);
+                        top_candidates.emplace(dist, cand_id);
                     }
                     if (top_candidates.size() > ef)
                         top_candidates.pop();
 
                     if (!top_candidates.empty())
-                        lowerBound =top_candidates.top().first;
+                        lowerBound = top_candidates.top().first;
                 }
             }
         }
-
         visited_list_pool_->releaseVisitedList(vl);
-
         return top_candidates;
     }
 
@@ -2360,18 +2373,20 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             int* data = (int*)get_linklist0(curr_node);
             size_t size = getListCount((linklistsizeint*)data);
             dist_t d_qc = candidate_dist;
+            dist_t sqrt_qc = std::sqrt(d_qc);
 
             for (size_t j = 0; j < size; ++j)
             {
                 tableint cand_id = *(data + j + 1);
-
                 if (visited_array[cand_id] == visited_array_tag)
                 {
                     continue;
                 }
                 visited_array[cand_id] = visited_array_tag;
-                dist_t d_cc = tri_edge_distances_[static_cast<size_t>(curr_node) *maxM0_ + j];
-                dist_t tri_lb =std::fabs(d_qc - d_cc);
+                dist_t d_cc =tri_edge_distances_[static_cast<size_t>(curr_node) * maxM0_ + j];
+                dist_t sqrt_cc = std::sqrt(d_cc);
+                dist_t diff = sqrt_qc - sqrt_cc;
+                dist_t tri_lb = diff * diff;
 
                 if (top_candidates.size() >= ef_search && tri_lb >= lowerBound)
                 {
