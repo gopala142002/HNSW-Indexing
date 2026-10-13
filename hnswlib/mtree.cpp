@@ -424,7 +424,7 @@ int MTree::greedySearch(const float* query) const
 }
 
 
-const MTNode* MTree::findLeafNode(const float* query) const
+const MTNode* MTree::findLeafNode(const float* query,uint64_t &distanceCounter) const
 {
     if (root == nullptr || query == nullptr)
     {
@@ -443,6 +443,7 @@ const MTNode* MTree::findLeafNode(const float* query) const
         {
             const RoutingEntry& entry = node->routingEntries[i];
             const float d = distance(query, getVector(entry.pivotID));
+            distanceCounter++;
 
             if (d < bestDist)
             {
@@ -460,9 +461,9 @@ const MTNode* MTree::findLeafNode(const float* query) const
 }
 
 
-int MTree::searchEntryPoint(const float* query) const
+int MTree::searchEntryPoint(const float* query,uint64_t &distanceCounter) const
 {
-    const MTNode* node = findLeafNode(query);
+    const MTNode* node = findLeafNode(query,distanceCounter);
     if (node == nullptr)
     {
         return -1;
@@ -471,9 +472,9 @@ int MTree::searchEntryPoint(const float* query) const
 }
 
 
-std::vector<int> MTree::searchEntryPointMulti(const float* query) const
+std::vector<int> MTree::searchEntryPointMulti(const float* query,uint64_t &distanceCounter) const
 {
-    const MTNode* node = findLeafNode(query);
+    const MTNode* node = findLeafNode(query,distanceCounter);
     if (node == nullptr)
     {
         return {};

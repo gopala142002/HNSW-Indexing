@@ -91,13 +91,21 @@ float KMeansTree::squaredDistance(const std::vector<float>& a,const float* b) co
 }
 
 
-int KMeansTree::findNearestCentroid(const float* vector,const std::vector<std::vector<float>>& centroids) const
+int KMeansTree::findNearestCentroid(const float* vector,const std::vector<std::vector<float>>& centroids,uint64_t* distanceCounter) const
 {
+    if (centroids.empty())
+        return -1;
     int nearest = 0;
     float minDistance =squaredDistance(centroids[0],vector);
+    if (distanceCounter != nullptr)
+        ++(*distanceCounter);
+
     for (size_t c = 1; c < centroids.size(); ++c)
     {
         float distance =squaredDistance(centroids[c],vector);
+        if (distanceCounter != nullptr)
+            ++(*distanceCounter);
+
         if (distance < minDistance)
         {
             minDistance = distance;
@@ -356,7 +364,7 @@ KMeansNode* KMeansTree::buildRecursive(std::vector<int>&& vectorIndices)
 }
 
 
-KMeansNode* KMeansTree::findLeaf(const float* query) const
+KMeansNode* KMeansTree::findLeaf(const float* query,uint64_t &distanceCounter) const
 {
     if (root == nullptr || query == nullptr)
     {
@@ -365,7 +373,7 @@ KMeansNode* KMeansTree::findLeaf(const float* query) const
     KMeansNode* current = root;
     while (current != nullptr && !current->isLeaf)
     {
-        int nearestChild = findNearestCentroid(query, current->centroids);
+        int nearestChild = findNearestCentroid(query, current->centroids,&distanceCounter);
         if (nearestChild < 0 || nearestChild >= static_cast<int>(current->children.size()))
         {
             return nullptr;
@@ -375,15 +383,15 @@ KMeansNode* KMeansTree::findLeaf(const float* query) const
     return current;
 }
 
-int KMeansTree::searchNN(const float* query) const
+int KMeansTree::searchNN(const float* query,uint64_t &distanceCounter) const
 {
-    KMeansNode* leaf = findLeaf(query);
+    KMeansNode* leaf = findLeaf(query,distanceCounter);
     return leaf ? leaf->representative : -1;
 }
 
-std::vector<int> KMeansTree::searchNNMulti(const float* query) const
+std::vector<int> KMeansTree::searchNNMulti(const float* query,uint64_t &distanceCounter) const
 {
-    KMeansNode* leaf = findLeaf(query);
+    KMeansNode* leaf = findLeaf(query,distanceCounter);
     if (leaf == nullptr)
     {
         return {};

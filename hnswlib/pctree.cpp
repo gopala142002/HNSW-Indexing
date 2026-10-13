@@ -442,7 +442,7 @@ PCNode* PCTree::buildNode(std::vector<int>& vectorIndices,const std::vector<floa
 }
 
 
-PCNode* PCTree::findLeaf(const float* query) const
+PCNode* PCTree::findLeaf(const float* query,uint64_t &distanceCounter) const
 {
     if (!root || query == nullptr)
     {
@@ -453,6 +453,7 @@ PCNode* PCTree::findLeaf(const float* query) const
     {
         float queryProj = dotProduct(query, current->principalComponent.data());
         size_t childIndex = 0;
+        distanceCounter++;
         while (childIndex < current->splitPoints.size() && queryProj >= current->splitPoints[childIndex])
         {
             ++childIndex;
@@ -468,18 +469,18 @@ PCNode* PCTree::findLeaf(const float* query) const
     return current;
 }
 
-int PCTree::searchNN(const float* query) const
+int PCTree::searchNN(const float* query,uint64_t &distanceCounter) const
 {
-    PCNode* leaf = findLeaf(query);
+    PCNode* leaf = findLeaf(query,distanceCounter);
     if (leaf == nullptr)
         return -1;
     return leaf->representative;
 }
 
 
-std::vector<int> PCTree::searchNNMulti(const float* query) const
+std::vector<int> PCTree::searchNNMulti(const float* query,uint64_t &distanceCounter) const
 {
-    PCNode* leaf = findLeaf(query);
+    PCNode* leaf = findLeaf(query,distanceCounter);
     if (leaf == nullptr)
     {
         return {};

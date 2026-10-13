@@ -1,6 +1,8 @@
 #pragma once
-#include <vector>
+
 #include <cstddef>
+#include <cstdint>
+#include <vector>
 
 
 class KMeansNode
@@ -46,8 +48,8 @@ class KMeansTree
     KMeansTree& operator=(const KMeansTree&) = delete;
     void build();
     void recomputeLeafClusters(int leafClusters);
-    int searchNN(const float* query) const;
-    std::vector<int> searchNNMulti(const float* query) const;
+    int searchNN(const float* query,uint64_t &distanceCounter) const;
+    std::vector<int> searchNNMulti(const float* query,uint64_t &distanceCounter) const;
     int getHeight() const;
     KMeansNode* root = nullptr;
     
@@ -62,7 +64,7 @@ class KMeansTree
     int leafCapacity;
     int leafClusters;
     
-    KMeansNode* findLeaf(const float* query) const;
+    KMeansNode* findLeaf(const float* query,uint64_t &distanceCounter) const;
 
     // Number of K-Means iterations at each node.
     static constexpr int MAX_KMEANS_ITERATIONS = 20;
@@ -75,7 +77,7 @@ class KMeansTree
 
     float squaredDistance(const float* a,const float* b) const;
     float squaredDistance(const std::vector<float>& a,const float* b) const;
-    int findNearestCentroid(const float* vector,const std::vector<std::vector<float>>& centroids) const;
+    int findNearestCentroid(const float* vector,const std::vector<std::vector<float>>& centroids,uint64_t* distanceCounter = nullptr) const;
     void initializeCentroids(const std::vector<int>& vectorIndices,int k,std::vector<std::vector<float>>& centroids) const;
     void runKMeans(const std::vector<int>& vectorIndices,std::vector<std::vector<float>>& centroids,std::vector<std::vector<int>>& clusters) const;
     int findNearestToPoint(const std::vector<float>& point,const std::vector<int>& vectorIndices) const;

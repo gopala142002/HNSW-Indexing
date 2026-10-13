@@ -89,16 +89,27 @@ int main(int argc, char** argv)
     const std::string base_path =data_dir + "/base.fvecs";
     const std::string query_path =data_dir + "/query.fvecs";
     const std::string gt_path =data_dir + "/groundtruth.ivecs";
+
+
+
+
     // Parameters
     const int M = 16;
     const int ef_construction = 200;
+
+
+
     // Search-effort values to benchmark. The graph and auxiliary trees are built once.
     const std::vector<int> ef_search_values = {200};
     const std::vector<int> k_values = {30};
     const int num_queries = 10000;
+
+
     const int leaf_capacity = 64;
     const int finger_rank = 16;
     const int finger_warmup = 16;
+
+
     const int pctree_partitions = 4;
     const int mtree_pivots=4;
     const int kmeans_clusters = 4;
@@ -106,6 +117,9 @@ int main(int argc, char** argv)
     const int mtree_leaf_clusters = 1;
     const int vpt_leaf_clusters = 1;
     const int pctree_leaf_clusters = 1;
+
+
+
     // Loading dataset base_vectors , ground Truth and queries
     std::cout<< "Loading dataset base vectors from "<< base_path << " ...\n";
     int base_dim, base_n;
@@ -125,8 +139,10 @@ int main(int argc, char** argv)
     const int dim = base_dim;
     const int N = base_n;
     const int Q = std::min(num_queries, q_n);
-    // Bulding HNSW Graph
 
+
+
+    // Bulding HNSW Graph
     std::cout<< "Building HNSW index over "<< N<< " vectors (M="<< M<< ", ef_construction="<< ef_construction<< ")...\n";
     hnswlib::L2Space space(dim);
     hnswlib::HierarchicalNSW<float> hnsw(&space,N,M,ef_construction);
@@ -144,6 +160,8 @@ int main(int argc, char** argv)
     std::cout<< "HNSW built in "<< std::fixed<< std::setprecision(1)<< build_sec<< " s. Max level = "<< hnsw.maxlevel_<< "\n";
     const int hnsw_num_levels = hnsw.maxlevel_ + 1;
 
+
+
     // Building PCTree
     std::cout<< "\nBuilding PCTree "<< "(leafCapacity="<< leaf_capacity<< ", numPartitions="<< pctree_partitions<< ", leafClusters="<< pctree_leaf_clusters<< ")...\n";
     auto t_pc_start =std::chrono::high_resolution_clock::now();
@@ -154,6 +172,7 @@ int main(int argc, char** argv)
     const int pctree_height = hnsw.getPCTreeHeight();
     std::cout<< "PCTree height: "<< pctree_height<< "\n";
 
+
     // Building MTree
     std::cout<< "\nBuilding MTree "<< "(leafCapacity="<< leaf_capacity<< ", leafClusters="<< mtree_leaf_clusters<< ")...\n";
     auto t_mtree_start =std::chrono::high_resolution_clock::now();
@@ -163,6 +182,7 @@ int main(int argc, char** argv)
     std::cout<< "MTree built in "<< std::setprecision(2)<< mtree_sec<< " s.\n";
     const int mtree_height = hnsw.getMTreeHeight();
     std::cout<< "MTree height: "<< mtree_height<< "\n";
+
 
     // Building VPTree
     std::cout<< "\nBuilding VantagePointTree "<< "(leafCapacity="<< leaf_capacity<< ", leafClusters="<< vpt_leaf_clusters<< ")...\n";
@@ -213,6 +233,8 @@ int main(int argc, char** argv)
     double tri_build_sec = std::chrono::duration<double>(t_tri_end - t_tri_start).count();
     std::cout << "TRI structures built in " << std::fixed << std::setprecision(2) << tri_build_sec << " s.\n\n";
     profilingStats profiler;
+
+    
     for (int leafClusters = 4; leafClusters <= 4; ++leafClusters)
     {
         std::cout << "\nRecomputing leaf clusters = " << leafClusters << "\n";

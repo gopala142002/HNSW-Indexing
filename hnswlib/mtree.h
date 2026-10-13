@@ -1,9 +1,9 @@
 #pragma once
-#define MTREE_H
 
 #include <cstddef>
 #include <utility>
 #include <vector>
+#include <cstdint>
 
 class MTNode; 
 
@@ -55,8 +55,8 @@ class MTree
         void insert(int vectorID);
 
         int greedySearch(const float* query) const;
-        int searchEntryPoint(const float* query) const;
-        std::vector<int> searchEntryPointMulti(const float* query) const;
+        int searchEntryPoint(const float* query,uint64_t &distanceCounter) const;
+        std::vector<int> searchEntryPointMulti(const float* query,uint64_t &distanceCounter) const;
         int getHeight() const;
 
         void recomputeLeafClusters(int leafClusters);
@@ -104,7 +104,7 @@ class MTree
         int findNearestToCentroidVec(const std::vector<float>& centroid,const std::vector<int>& vectorIndices) const;
         void preprocessLeafEntryPoints(MTNode* node);
 
-        const MTNode* findLeafNode(const float* query) const;
+        const MTNode* findLeafNode(const float* query,uint64_t &distanceCounter) const;
         int findNearestCentroidIdx(const float* vector,const std::vector<std::vector<float>>& centroids) const;
         void initializeLeafCentroids(const std::vector<int>& vectorIndices,int k,std::vector<std::vector<float>>& centroids) const;
         void runLeafKMeans(const std::vector<int>& vectorIndices,std::vector<std::vector<float>>& centroids,std::vector<std::vector<int>>& clusters) const;

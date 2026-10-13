@@ -118,17 +118,19 @@ int main(int argc, char** argv)
     const int ef_search = 50;
     const int k = 30;
     const int num_queries = 10000;
-    const int leaf_capacity = 64;
+    const int leaf_capacity = 16;
     const int finger_rank = 16;
     const int finger_warmup = 8;
     // const int vt_pivots = 2;
     const int pctree_partitions = 4;
-    const int mtree_pivots=5;
+    const int mtree_pivots=4;
     const int kmeans_clusters = 4;
-    const int kmeans_leaf_clusters = 3;
-    const int pctree_leaf_clusters = 3;
-    const int mtree_leaf_clusters = 3;
-    const int vpt_leaf_clusters = 3;
+    const int vpt_partitions = 4;
+
+    const int kmeans_leaf_clusters = 4;
+    const int pctree_leaf_clusters = 4;
+    const int mtree_leaf_clusters = 4;
+    const int vpt_leaf_clusters = 4;
 
 
 
@@ -202,7 +204,7 @@ int main(int argc, char** argv)
     // Building VPTree
     std::cout<< "\nBuilding VantagePointTree "<< "(leafCapacity="<< leaf_capacity<< ", leafClusters="<< vpt_leaf_clusters<< ")...\n";
     auto t_vp_start =std::chrono::high_resolution_clock::now();
-    hnsw.buildVantagePointTree(leaf_capacity, vpt_leaf_clusters);
+    hnsw.buildVantagePointTree(vpt_partitions,leaf_capacity, vpt_leaf_clusters);
     auto t_vp_end =std::chrono::high_resolution_clock::now();
     double vpt_build_time =std::chrono::duration<double>(t_vp_end - t_vp_start).count();
     std::cout<< "VantagePointTree built in "<< std::fixed<< std::setprecision(2)<< vpt_build_time<< " s.\n";
@@ -273,7 +275,7 @@ int main(int argc, char** argv)
     const size_t vpt_mem_bytes     = hnsw.getVPTreeMemoryBytes();
     const size_t kmeans_mem_bytes  = hnsw.getKMeansTreeMemoryBytes();
 
-    const std::string memory_csv_path = "hnsw_memory_gist.csv";
+    const std::string memory_csv_path = "hnsw_memory_sift.csv";
     std::ofstream memory_csv(memory_csv_path);
     if (!memory_csv)
     {
@@ -749,7 +751,7 @@ int main(int argc, char** argv)
     const double speedup_vpt_finger_multi = avg_time_hnsw_ns / avg_time_vpt_finger_multi_ns;
     const double speedup_vpt_tri_multi = avg_time_hnsw_ns / avg_time_vpt_tri_multi_ns;
 
-    std::cout << "\nGIST RESULTS\n";
+    std::cout << "\nSIFT RESULTS\n";
     std::cout << "N=" << N << ", dim=" << dim<< ", k=" << k << ", ef=" << ef_search<< ", queries=" << Q << "\n\n";
 
     std::cout << std::fixed << std::setprecision(4);
@@ -796,7 +798,7 @@ int main(int argc, char** argv)
 
     // One summary row per search method, single CSV, this file is overwritten on every run.
     // All timing values below are stored in NANOSECONDS.
-    const std::string csv_path = "hnsw_results_gist.csv";
+    const std::string csv_path = "hnsw_results_sift.csv";
     std::ofstream csv(csv_path);
     if (!csv) 
     {
@@ -1009,6 +1011,74 @@ int main(int argc, char** argv)
     csv.close();
 
     std::cout << "\nCSV written to: " << csv_path << "\n";
+
+
+
+    if (Q <= 0) {
+        throw std::runtime_error("Q must be positive.");
+    }
+
+    const std::string distance_csv_path ="hnsw_distance_computations_sift_leaf_capacity_16.csv";
+
+    std::ofstream distance_csv(distance_csv_path);
+
+    if (!distance_csv) 
+    {
+        throw std::runtime_error("Cannot open " + distance_csv_path + " for writing");
+    }
+
+    distance_csv<< "counter_name,total_computations,"<< "avg_computations_per_query\n";
+
+    auto write_counter = [&](const char* name, uint64_t total) {
+        distance_csv<< name << ','<< total << ','<< static_cast<double>(total) / static_cast<double>(Q)<< '\n';
+    };
+
+   
+
+    write_counter("hnswDistanceComputations",profiler.hnswDistanceComputations);
+    write_counter("hnswFingerDistanceComputations",profiler.hnswFingerDistanceComputations);
+    write_counter("hnswTriDistanceComputations",profiler.hnswTriDistanceComputations);
+
+    write_counter("hnswDistanceComputations_PCTree",profiler.hnswDistanceComputations_PCTree);
+    write_counter("hnswFingerDistanceComputations_PCTree",profiler.hnswFingerDistanceComputations_PCTree);
+    write_counter("hnswTriDistanceComputations_PCTree",profiler.hnswTriDistanceComputations_PCTree);
+    write_counter("hnswDistanceComputations_MTree",profiler.hnswDistanceComputations_MTree);
+    write_counter("hnswFingerDistanceComputations_MTree",profiler.hnswFingerDistanceComputations_MTree);
+    write_counter("hnswTriDistanceComputations_MTree",profiler.hnswTriDistanceComputations_MTree);
+    write_counter("hnswDistanceComputations_VPTree",profiler.hnswDistanceComputations_VPTree);
+    write_counter("hnswFingerDistanceComputations_VPTree",profiler.hnswFingerDistanceComputations_VPTree);
+    write_counter("hnswTriDistanceComputations_VPTree",profiler.hnswTriDistanceComputations_VPTree);
+    write_counter("hnswDistanceComputations_KMeansTree",profiler.hnswDistanceComputations_KMeansTree);
+    write_counter("hnswFingerDistanceComputations_KMeansTree",profiler.hnswFingerDistanceComputations_KMeansTree);
+    write_counter("hnswTriDistanceComputations_KMeansTree",profiler.hnswTriDistanceComputations_KMeansTree);
+    write_counter("hnswDistanceComputations_PCTreeMulti",profiler.hnswDistanceComputations_PCTreeMulti);
+    write_counter("hnswFingerDistanceComputations_PCTreeMulti",profiler.hnswFingerDistanceComputations_PCTreeMulti);
+    write_counter("hnswTriDistanceComputations_PCTreeMulti",profiler.hnswTriDistanceComputations_PCTreeMulti);
+    write_counter("hnswDistanceComputations_MTreeMulti",profiler.hnswDistanceComputations_MTreeMulti);
+    write_counter("hnswFingerDistanceComputations_MTreeMulti",profiler.hnswFingerDistanceComputations_MTreeMulti);
+    write_counter("hnswTriDistanceComputations_MTreeMulti",profiler.hnswTriDistanceComputations_MTreeMulti);
+    write_counter("hnswDistanceComputations_VPTreeMulti",profiler.hnswDistanceComputations_VPTreeMulti);
+    write_counter("hnswFingerDistanceComputations_VPTreeMulti",profiler.hnswFingerDistanceComputations_VPTreeMulti);
+    write_counter("hnswTriDistanceComputations_VPTreeMulti",profiler.hnswTriDistanceComputations_VPTreeMulti);
+    write_counter("hnswDistanceComputations_KMeansTreeMulti",profiler.hnswDistanceComputations_KMeansTreeMulti);
+    write_counter("hnswFingerDistanceComputations_KMeansTreeMulti",profiler.hnswFingerDistanceComputations_KMeansTreeMulti);
+    write_counter("hnswTriDistanceComputations_KMeansTreeMulti",profiler.hnswTriDistanceComputations_KMeansTreeMulti);
+    write_counter("pctreeDistanceComputations",profiler.pctreeDistanceComputations);
+    write_counter("pctreeDistanceComputationsMulti",profiler.pctreeDistanceComputationsMulti);
+    write_counter("mtreeDistanceComputations",profiler.mtreeDistanceComputations);
+    write_counter("mtreeDistanceComputationsMulti",profiler.mtreeDistanceComputationsMulti);
+    write_counter("vptreeDistanceComputations",profiler.vptreeDistanceComputations);
+    write_counter("vptreeDistanceComputationsMulti",profiler.vptreeDistanceComputationsMulti);
+    write_counter("kmeansTreeDistanceComputations",profiler.kmeansTreeDistanceComputations);
+    write_counter("kmeansTreeDistanceComputationsMulti",profiler.kmeansTreeDistanceComputationsMulti);
+
+    
+
+    write_counter("hnswUpperLayerDistanceComputations",profiler.hnswUpperLayerDistanceComputations);
+
+    distance_csv.close();
+
+    std::cout<< "\nDistance-computation averages written to: "<< distance_csv_path << '\n';
 
     // Console summary
     std::cout << "\nPER-LEVEL / ENTRY-POINT TIMING (avg per query)\n";

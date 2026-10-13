@@ -8,18 +8,23 @@
 
 VPTNode::~VPTNode() 
 {
-    delete left;
-    delete right;
+    for (auto child : children) 
+    {
+        delete child;
+    }
 }
 
-VantagePointTree::VantagePointTree(char* data_level0_memory, size_t data_size, size_t dim, size_t num_vectors, int leafCapacity, int leafClusters)
+VantagePointTree::VantagePointTree(char* data_level0_memory, size_t data_size, size_t dim, size_t num_vectors, int leafCapacity,int numPartitions, int leafClusters)
 {
+
     this->data_level0_memory = data_level0_memory;
     this->data_size = data_size;
     this->dim = dim;
     this->num_vectors = num_vectors;
     this->leafCapacity = leafCapacity;
     this->leafClusters = leafClusters < 1 ? 1 : leafClusters;
+    this->numPartitions = numPartitions;
+
 
     if (data_level0_memory == nullptr) 
     {
@@ -28,6 +33,10 @@ VantagePointTree::VantagePointTree(char* data_level0_memory, size_t data_size, s
     if (leafCapacity < 1) 
     {
         throw std::invalid_argument("VantagePointTree: leafCapacity must be >= 1");
+    }
+    if (numPartitions < 2)
+    {
+        throw std::invalid_argument("VantagePointTree: numPartitions must be >= 2");
     }
 }
 
@@ -105,21 +114,23 @@ void VantagePointTree::recomputeLeafClusters(int newLeafClusters)
             return;
         }
 
-        recompute(node->left);
-        recompute(node->right);
+        for (auto child : node->children)
+        {
+            recompute(child);
+        }
     };
 
     recompute(root);
 }
 
-VPTNode* VantagePointTree::buildRecursive(std::vector<int>&& indices) 
+
+VPTNode* VantagePointTree::buildRecursive(std::vector<int>&& indices)
 {
     VPTNode* node = new VPTNode();
-
     const int n = static_cast<int>(indices.size());
 
     // Base case: create leaf node
-    if (n <= leafCapacity) 
+    if (n <= leafCapacity)
     {
         node->isLeaf = true;
         node->vectorIndices = std::move(indices);
@@ -128,7 +139,7 @@ VPTNode* VantagePointTree::buildRecursive(std::vector<int>&& indices)
 
     // Choose a pivot point from the indices
     int pivotId = choosePivot(indices);
-    if (pivotId < 0) 
+    if (pivotId < 0)
     {
         node->isLeaf = true;
         node->vectorIndices = std::move(indices);
@@ -140,61 +151,75 @@ VPTNode* VantagePointTree::buildRecursive(std::vector<int>&& indices)
 
     // Calculate distances from pivot to all points
     const float* pivotVec = getVector(pivotId);
-    std::vector<float> distances;
-    distances.reserve(indices.size());
 
-    for (int idx : indices) 
+    std::vector<std::pair<float, int>> distanceIndexPairs;
+    distanceIndexPairs.reserve(indices.size());
+
+    for (int idx : indices)
     {
         float d = distance(pivotVec, getVector(idx));
-        distances.push_back(d);
+        distanceIndexPairs.emplace_back(d, idx);
     }
 
-    // Find median distance
-    std::vector<float> sortedDist = distances;
-    std::nth_element(sortedDist.begin(), sortedDist.begin() + sortedDist.size() / 2, sortedDist.end());
-    node->median_distance = sortedDist[sortedDist.size() / 2];
-
-    // Partition indices based on median distance
-    std::vector<int> leftIndices, rightIndices;
-    leftIndices.reserve(indices.size());
-    rightIndices.reserve(indices.size());
-
-    for (size_t i = 0; i < indices.size(); ++i) 
-    {
-        if (distances[i] <= node->median_distance) 
+    // Sort points according to their distance from the pivot
+    std::sort(
+        distanceIndexPairs.begin(),
+        distanceIndexPairs.end(),
+        [](const std::pair<float, int>& a,
+           const std::pair<float, int>& b)
         {
-            leftIndices.push_back(indices[i]);
-        } 
-        else 
-        {
-            rightIndices.push_back(indices[i]);
+            return a.first < b.first;
         }
-    }
+    );
 
-    // Ensure both partitions are non-empty
-    if (leftIndices.empty()) 
+    // Determine actual number of partitions
+    const int actualK = std::min(numPartitions,static_cast<int>(distanceIndexPairs.size()));
+
+    
+    if (actualK <= 1)
     {
-        leftIndices.push_back(rightIndices.back());
-        rightIndices.pop_back();
+        node->isLeaf = true;
+        node->vectorIndices = std::move(indices);
+        return node;
     }
-    if (rightIndices.empty()) 
+
+    node->children.reserve(actualK);
+    node->childMaxDistances.reserve(actualK);
+
+    // Divide sorted points into approximately equal-sized partitions
+    const int baseSize = n / actualK;
+    const int remainder = n % actualK;
+
+    size_t start = 0;
+    for (int k = 0; k < actualK; ++k)
     {
-        rightIndices.push_back(leftIndices.back());
-        leftIndices.pop_back();
+        // First 'remainder' partitions get one extra point
+        const int partitionSize =baseSize + (k < remainder ? 1 : 0);
+
+        std::vector<int> childIndices;
+        childIndices.reserve(partitionSize);
+
+        for (int j = 0; j < partitionSize; ++j)
+        {
+            childIndices.push_back(distanceIndexPairs[start + j].second);
+        }
+
+        // Maximum distance in this partition.
+        // This acts as the boundary for routing queries.
+        const float maxDistance =distanceIndexPairs[start + partitionSize - 1].first;
+        node->childMaxDistances.push_back(maxDistance);
+
+        // Recursively construct child
+        VPTNode* child =buildRecursive(std::move(childIndices));
+        if (child)
+        {
+            child->parent = node;
+            node->children.push_back(child);
+        }
+        start += partitionSize;
     }
-
-    // Recursively build left and right subtrees
-    node->left = buildRecursive(std::move(leftIndices));
-    node->right = buildRecursive(std::move(rightIndices));
-
-    if (node->left)
-        node->left->parent = node;
-    if (node->right)
-        node->right->parent = node;
-
     return node;
 }
-
 
 std::vector<float> VantagePointTree::computeLeafCentroid(const VPTNode* leaf) const
 {
@@ -453,13 +478,15 @@ void VantagePointTree::preprocessLeafEntryPoints(VPTNode* node)
 
         return;
     }
-    preprocessLeafEntryPoints(node->left);
-    preprocessLeafEntryPoints(node->right);
+    for (auto child : node->children)
+    {
+        preprocessLeafEntryPoints(child);
+    }
 }
 
-int VantagePointTree::searchEntryPoint(const float* query) const
+int VantagePointTree::searchEntryPoint(const float* query,uint64_t &distanceCounter) const
 {
-    const VPTNode* node = findLeafNode(query);
+    const VPTNode* node = findLeafNode(query,distanceCounter);
     if (node == nullptr)
     {
         return -1;
@@ -468,7 +495,7 @@ int VantagePointTree::searchEntryPoint(const float* query) const
 }
 
 
-const VPTNode* VantagePointTree::findLeafNode(const float* query) const
+const VPTNode* VantagePointTree::findLeafNode(const float* query,uint64_t &distanceCounter) const
 {
     if (root == nullptr || query == nullptr)
     {
@@ -478,22 +505,30 @@ const VPTNode* VantagePointTree::findLeafNode(const float* query) const
     while (current != nullptr && !current->isLeaf)
     {
         const float d = distance(query, getVector(current->pivot));
-        if (d <= current->median_distance)
+        distanceCounter++;
+        // Find the child whose distance range contains d
+        size_t childIndex = 0;
+        while (childIndex + 1 < current->childMaxDistances.size() && d > current->childMaxDistances[childIndex])
         {
-            current = current->left;
+            ++childIndex;
+        }
+
+        // Safety check
+        if (childIndex < current->children.size())
+        {
+            current = current->children[childIndex];
         }
         else
         {
-            current = current->right;
+            return nullptr;
         }
     }
     return current;
 }
 
-
-std::vector<int> VantagePointTree::searchEntryPointMulti(const float* query) const
+std::vector<int> VantagePointTree::searchEntryPointMulti(const float* query,uint64_t &distanceCounter) const
 {
-    const VPTNode* node = findLeafNode(query);
+    const VPTNode* node = findLeafNode(query,distanceCounter);
     if (node == nullptr)
     {
         return {};
@@ -501,45 +536,13 @@ std::vector<int> VantagePointTree::searchEntryPointMulti(const float* query) con
     return node->leafClusterRepresentatives;
 }
 
-std::vector<int> VantagePointTree::searchNN(const float* query) const 
+int VantagePointTree::searchNN(const float* query,uint64_t &distanceCounter) const
 {
-    std::vector<int> collected;
-
-    if (root == nullptr || query == nullptr) 
-    {
-        return collected;
-    }
-
-    // Greedy search: traverse the tree following the path closest to query
-    VPTNode* current = root;
-
-    while (current != nullptr) 
-    {
-        if (current->isLeaf) 
-        {
-            // Collect all points from the leaf
-            collected.insert(collected.end(), current->vectorIndices.begin(), current->vectorIndices.end());
-            break;
-        }
-
-        // Calculate distance from query to pivot
-        const float d = distance(query, getVector(current->pivot));
-        
-        // Also collect the pivot itself as a candidate
-        collected.push_back(current->pivot);
-
-        // Decide which subtree to traverse
-        if (d <= current->median_distance) 
-        {
-            current = current->left;
-        } 
-        else 
-        {
-            current = current->right;
-        }
-    }
-
-    return collected;
+    return searchEntryPoint(query,distanceCounter);
+}
+std::vector<int> VantagePointTree::searchNNMulti(const float* query,uint64_t &distanceCounter) const
+{
+    return searchEntryPointMulti(query,distanceCounter);
 }
 
 int VantagePointTree::getHeight() const
@@ -553,12 +556,14 @@ int VantagePointTree::calculateHeight(VPTNode* node) const
     {
         return 0;
     }
-
-    int leftHeight = calculateHeight(node->left);
-    int rightHeight = calculateHeight(node->right);
-
-    return 1 + std::max(leftHeight, rightHeight);
+    int maxChildHeight = 0;
+    for (VPTNode* child : node->children)
+    {
+        maxChildHeight = std::max(maxChildHeight,calculateHeight(child));
+    }
+    return 1 + maxChildHeight;
 }
+
 size_t VantagePointTree::nodeMemoryUsage(const VPTNode* node) const
 {
     if (!node) return 0;
@@ -572,8 +577,10 @@ size_t VantagePointTree::nodeMemoryUsage(const VPTNode* node) const
     for (const auto& c : node->leafClusterCentroids)
         total += c.capacity() * sizeof(float);
 
-    total += nodeMemoryUsage(node->left);
-    total += nodeMemoryUsage(node->right);
+    for (const auto child : node->children)
+    {
+        total += nodeMemoryUsage(child);
+    }
 
     return total;
 }

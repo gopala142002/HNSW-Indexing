@@ -1,0 +1,10 @@
+approach,num_queries,avg_single_euclidean_distance,avg_min_distance,avg_mean_distance,avg_max_distance
+HNSW-Baseline,10000,241.005125,,,
+MTree,10000,315.236432,,,
+MTree-Multi,10000,,295.979130,335.662769,374.325399
+PCTree,10000,467.632050,,,
+PCTree-Multi,10000,,444.297209,481.329563,519.091405
+VPTree,10000,536.064723,,,
+VPTree-Multi,10000,,425.999012,534.340212,631.522218
+KMeansTree,10000,453.441210,,,
+KMeansTree-Multi,10000,,429.504024,460.789415,492.195847
