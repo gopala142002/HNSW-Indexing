@@ -355,6 +355,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
     // for Tri-Scheme precomputation
     std::vector<dist_t> tri_edge_distances_;
+    std::vector<std::vector<std::vector<dist_t>>> upper_tri_edge_distances_;
     bool tri_ready_ = false;
 
     char *data_level0_memory_{nullptr};
@@ -537,30 +538,66 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // Tri-Scheme precomputation
-    void buildTriDistances() 
+    // TRI-Scheme precomputation for Level 0 and all upper layers.
+    void buildTriDistances()
     {
+        tri_ready_ = false;
 
         if (cur_element_count == 0)
+        {
+            tri_edge_distances_.clear();
+            upper_tri_edge_distances_.clear();
             return;
+        }
 
         tri_edge_distances_.assign(static_cast<size_t>(cur_element_count) * maxM0_,std::numeric_limits<dist_t>::max());
-
-        for (tableint node = 0; node < cur_element_count; ++node) 
+        for (tableint node = 0; node < cur_element_count; ++node)
         {
-
             linklistsizeint* linklist = get_linklist0(node);
             size_t size = getListCount(linklist);
-
-            tableint* neighbors = (tableint*)(linklist + 1);
-
-            for (size_t j = 0; j < size; ++j) 
+            tableint* neighbors = reinterpret_cast<tableint*>(linklist + 1);
+            for (size_t j = 0; j < size; ++j)
             {
                 tableint neighbor = neighbors[j];
-                dist_t d = fstdistfunc_(getDataByInternalId(node),getDataByInternalId(neighbor),dist_func_param_);
-                tri_edge_distances_[static_cast<size_t>(node) * maxM0_ + j] = d;
+
+                dist_t d = fstdistfunc_(
+                    getDataByInternalId(node),
+                    getDataByInternalId(neighbor),
+                    dist_func_param_
+                );
+
+                tri_edge_distances_[
+                    static_cast<size_t>(node) * maxM0_ + j
+                ] = d;
             }
         }
 
+        upper_tri_edge_distances_.clear();
+        upper_tri_edge_distances_.resize(cur_element_count);
+
+        for (tableint node = 0; node < cur_element_count; ++node)
+        {
+            int node_max_level = element_levels_[node];
+            upper_tri_edge_distances_[node].resize(static_cast<size_t>(node_max_level) + 1);
+
+            for (int level = 1; level <= node_max_level; ++level)
+            {
+                linklistsizeint* linklist = get_linklist(node, level);
+
+                size_t size = getListCount(linklist);
+                tableint* neighbors =
+                    reinterpret_cast<tableint*>(linklist + 1);
+
+                upper_tri_edge_distances_[node][level].resize(size);
+
+                for (size_t j = 0; j < size; ++j)
+                {
+                    tableint neighbor = neighbors[j];
+                    dist_t d = fstdistfunc_(getDataByInternalId(node),getDataByInternalId(neighbor),dist_func_param_);
+                    upper_tri_edge_distances_[node][level][j] = d;
+                }
+            }
+        }
         tri_ready_ = true;
     }
 
@@ -690,8 +727,17 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     {
         if (!tri_ready_)
             return 0;
-
-        return tri_edge_distances_.capacity() * sizeof(dist_t);
+        size_t total = tri_edge_distances_.capacity() * sizeof(dist_t);
+        total += upper_tri_edge_distances_.capacity()* sizeof(upper_tri_edge_distances_[0]);
+        for (const auto& nodeLevels : upper_tri_edge_distances_)
+        {
+            total += nodeLevels.capacity()* sizeof(nodeLevels[0]);
+            for (const auto& levelDistances : nodeLevels)
+            {
+                total += levelDistances.capacity() * sizeof(dist_t);
+            }
+        }
+        return total;
     }
 
     
@@ -725,6 +771,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         tri_ready_ = false;
         cur_element_count = 0;
         visited_list_pool_.reset(nullptr);
+        upper_tri_edge_distances_.clear();
     }
 
     struct CompareByFirst 
@@ -3907,6 +3954,95 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
         return result;
     }
+
+
+    // HNSW -> TRI optimization at all levels.
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnTriAllLevels(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    {
+        using ResultQueue =std::priority_queue<std::pair<dist_t, labeltype>>;
+
+        ResultQueue empty;
+
+        if (cur_element_count == 0)
+            return empty;
+
+        if (!tri_ready_)
+        {
+            throw std::runtime_error("TRI search requested before buildTriDistances().");
+        }
+        const auto upper_start = std::chrono::steady_clock::now();
+
+        tableint currObj = enterpoint_node_;
+        dist_t curdist = fstdistfunc_(query_data,getDataByInternalId(currObj),dist_func_param_);
+        profiler->hnswUpperLayerDistanceComputationsTRI++;
+        
+
+        for (int level = maxlevel_; level > 0; --level)
+        {
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+                tableint currentNode = currObj;
+                dist_t currentDist = curdist;
+                tableint bestNode = currentNode;
+                dist_t bestDist = currentDist;
+                linklistsizeint* linklist =get_linklist(currentNode, level);
+                size_t neighborCount = getListCount(linklist);
+                tableint* neighbors =reinterpret_cast<tableint*>(linklist + 1);
+
+    
+                const auto& edgeDistances =upper_tri_edge_distances_[currentNode][level];
+                dist_t sqrtQueryDist = std::sqrt(currentDist);
+                for (size_t j = 0; j < neighborCount; ++j)
+                {
+                    tableint candidate = neighbors[j];
+                    dist_t edgeDist = edgeDistances[j];
+                    
+                    dist_t sqrtEdgeDist = std::sqrt(edgeDist);
+
+                    dist_t diff = sqrtQueryDist - sqrtEdgeDist;
+                    dist_t lowerBound = diff * diff;
+
+                    if (lowerBound >= bestDist)
+                        continue;
+
+
+                    dist_t candidateDist = fstdistfunc_(query_data,getDataByInternalId(candidate),dist_func_param_);
+                    profiler->hnswUpperLayerDistanceComputationsTRI++;
+                    
+                    if (candidateDist < bestDist)
+                    {
+                        bestDist = candidateDist;
+                        bestNode = candidate;
+                    }
+                }
+
+                if (bestNode != currentNode)
+                {
+                    currObj = bestNode;
+                    curdist = bestDist;
+                    changed = true;
+                }
+            }
+        }
+
+        printSeedDistance("HNSW-TRI-AllLevels", query_data, currObj);
+
+        const auto upper_end = std::chrono::steady_clock::now();
+
+        if (profiler != nullptr)
+        {
+            profiler->hnswTriAllLevelsUpperLayerTimeNs += std::chrono::duration<double, std::nano>(upper_end - upper_start).count();
+        }
+
+        const auto level0_start = std::chrono::steady_clock::now();
+        auto result = searchFromEntryPointTri(currObj, query_data, k,profiler->hnswLevel0DistanceComputationsWithTRI,isIdAllowed);
+        const auto level0_end = std::chrono::steady_clock::now();
+        profiler->hnswTriAllLevelsLevel0TimeNs +=std::chrono::duration<double, std::nano>(level0_end - level0_start).count();
+        return result;
+    }
+    
 
     
     // VTree -> TRI

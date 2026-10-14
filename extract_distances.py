@@ -4,7 +4,7 @@ import csv
 from collections import defaultdict
 
 INPUT_FILE = "combined_test.log"
-OUTPUT_FILE = "euclidean_distance_summary.csv"
+OUTPUT_FILE = "euclidean_distance_summary_leaf_capacity_32.csv"
 
 single_distances = defaultdict(list)
 

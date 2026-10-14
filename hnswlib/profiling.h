@@ -51,6 +51,11 @@ public:
     double kmeansTreeTimeNs = 0.0;
 
 
+    // Timing for the all-levels TRI approach
+    double hnswTriAllLevelsUpperLayerTimeNs = 0.0;
+    double hnswTriAllLevelsLevel0TimeNs = 0.0;    
+
+
     // for count of distance computations
     uint64_t hnswDistanceComputations=0;
     uint64_t hnswFingerDistanceComputations=0;
@@ -101,6 +106,9 @@ public:
     uint64_t kmeansTreeDistanceComputationsMulti = 0;
 
     uint64_t hnswUpperLayerDistanceComputations = 0;
+
+    uint64_t hnswUpperLayerDistanceComputationsTRI = 0;
+    uint64_t hnswLevel0DistanceComputationsWithTRI = 0;
 
     void reset(size_t num_levels)
     {
@@ -158,6 +166,9 @@ public:
         hnswFingerDistanceComputations_MTree = 0;
         hnswTriDistanceComputations_MTree = 0;
 
+        hnswTriAllLevelsUpperLayerTimeNs = 0.0;
+        hnswTriAllLevelsLevel0TimeNs = 0.0;
+
         hnswDistanceComputations_VPTree = 0;
         hnswFingerDistanceComputations_VPTree = 0;
         hnswTriDistanceComputations_VPTree = 0;
@@ -187,5 +198,8 @@ public:
         vptreeDistanceComputations = 0;
         kmeansTreeDistanceComputations = 0;
         hnswUpperLayerDistanceComputations = 0;
+
+        hnswUpperLayerDistanceComputationsTRI=0;
+        hnswLevel0DistanceComputationsWithTRI=0;
     }
 };
