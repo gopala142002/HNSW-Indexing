@@ -105,7 +105,7 @@ std::vector<size_t> extract_ids(std::priority_queue<std::pair<float, hnswlib::la
 
 int main(int argc, char** argv) 
 {
-    const std::string data_dir =(argc > 1)? argv[1]: "./datasets/gist";
+    const std::string data_dir =(argc > 1)? argv[1]: "./datasets/sift";
     const std::string base_path =data_dir + "/base.fvecs";
     const std::string query_path =data_dir + "/query.fvecs";
     const std::string gt_path =data_dir + "/groundtruth.ivecs";
@@ -278,7 +278,7 @@ int main(int argc, char** argv)
     const size_t vpt_mem_bytes     = hnsw.getVPTreeMemoryBytes();
     const size_t kmeans_mem_bytes  = hnsw.getKMeansTreeMemoryBytes();
 
-    const std::string memory_csv_path = "hnsw_memory_gist.csv";
+    const std::string memory_csv_path = "hnsw_memory_sift.csv";
     std::ofstream memory_csv(memory_csv_path);
     if (!memory_csv)
     {
@@ -949,7 +949,7 @@ int main(int argc, char** argv)
 
     // One summary row per search method, single CSV, this file is overwritten on every run.
     // All timing values below are stored in NANOSECONDS.
-    const std::string csv_path = "hnsw_results_gist.csv";
+    const std::string csv_path = "hnsw_results_sift.csv";
     std::ofstream csv(csv_path);
     if (!csv) 
     {
@@ -1178,7 +1178,7 @@ int main(int argc, char** argv)
         throw std::runtime_error("Q must be positive.");
     }
 
-    const std::string distance_csv_path ="hnsw_distance_computations_gist_leaf_capacity_64.csv";
+    const std::string distance_csv_path ="hnsw_distance_computations_sift_leaf_capacity_64.csv";
 
     std::ofstream distance_csv(distance_csv_path);
 

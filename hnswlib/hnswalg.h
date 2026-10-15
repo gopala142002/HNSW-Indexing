@@ -458,12 +458,12 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // Print distance between a query and one starting seed.
-    void printSeedDistance(const char* approach,const void* query_data,tableint seed_id) const 
-    {
-        double squared_l2 = static_cast<double>(fstdistfunc_(query_data,getDataByInternalId(seed_id),dist_func_param_));
+    // void printSeedDistance(const char* approach,const void* query_data,tableint seed_id) const 
+    // {
+    //     double squared_l2 = static_cast<double>(fstdistfunc_(query_data,getDataByInternalId(seed_id),dist_func_param_));
 
-        std::cout<< "[SEED_DISTANCE]"<< " approach=" << approach<< " seed_internal_id=" << seed_id<< " seed_label=" << getExternalLabel(seed_id)<< " squared_l2=" << squared_l2<< " euclidean_l2=" << std::sqrt(squared_l2)<< std::endl;
-    }
+    //     std::cout<< "[SEED_DISTANCE]"<< " approach=" << approach<< " seed_internal_id=" << seed_id<< " seed_label=" << getExternalLabel(seed_id)<< " squared_l2=" << squared_l2<< " euclidean_l2=" << std::sqrt(squared_l2)<< std::endl;
+    // }
 
 
     // Print distances for multiple starting seeds.
@@ -2646,7 +2646,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
         // Have to comment out next line
-        printSeedDistance("MTree",query_data,currObj);
+        // printSeedDistance("MTree",query_data,currObj);
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
@@ -2932,7 +2932,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // Have to comment out next line
-        printSeedDistance("VPTree",query_data,currObj);
+        // printSeedDistance("VPTree",query_data,currObj);
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         auto tree_start = std::chrono::high_resolution_clock::now();
@@ -3218,7 +3218,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
         // Have to comment out next line
-        printSeedDistance("PCTree",query_data,currObj);
+        // printSeedDistance("PCTree",query_data,currObj);
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         auto tree_start = std::chrono::high_resolution_clock::now();
@@ -3504,7 +3504,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
         // have to comment out next line
-        printSeedDistance("KMeansTree",query_data,currObj);
+        // printSeedDistance("KMeansTree",query_data,currObj);
 
 
 
@@ -3814,7 +3814,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // have to comment out line
-        printSeedDistance("HNSW-Baseline", query_data, currObj);
+        // printSeedDistance("HNSW-Baseline", query_data, currObj);
 
 
 
@@ -4027,7 +4027,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             }
         }
 
-        printSeedDistance("HNSW-TRI-AllLevels", query_data, currObj);
+        // printSeedDistance("HNSW-TRI-AllLevels", query_data, currObj);
 
         const auto upper_end = std::chrono::steady_clock::now();
 
