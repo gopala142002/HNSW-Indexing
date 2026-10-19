@@ -43,11 +43,11 @@ class VantagePointTree
 
     void build();
     void recomputeLeafClusters(int leafClusters);
-    int searchNN(const float* query,uint64_t &distanceCounter) const;
-    std::vector<int> searchNNMulti(const float* query,uint64_t &distanceCounter) const;
+    int searchNN(const float* query,uint64_t& distanceCounter,int beamWidth) const;
+    std::vector<int> searchNNMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const;
     int getHeight() const;
-    int searchEntryPoint(const float* query,uint64_t &distanceCounter) const;
-    std::vector<int> searchEntryPointMulti(const float* query,uint64_t &distanceCounter) const;
+    int searchEntryPoint(const float* query,uint64_t& distanceCounter,int beamWidth) const;
+    std::vector<int> searchEntryPointMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const;
 
     VPTNode* root = nullptr;
     size_t memoryUsageBytes() const;
@@ -76,7 +76,7 @@ class VantagePointTree
     int findNearestToCentroidVec(const std::vector<float>& centroid,const std::vector<int>& vectorIndices) const;
     void preprocessLeafEntryPoints(VPTNode* node);
 
-    const VPTNode* findLeafNode(const float* query,uint64_t &distanceCounter) const;
+    std::vector<const VPTNode*> findLeafNodes(const float* query,uint64_t& distanceCounter,int beamWidth) const;
     int findNearestCentroidIdx(const float* vector,const std::vector<std::vector<float>>& centroids) const;
     void initializeLeafCentroids(const std::vector<int>& vectorIndices,int k,std::vector<std::vector<float>>& centroids) const;
     void runLeafKMeans(const std::vector<int>& vectorIndices,std::vector<std::vector<float>>& centroids,std::vector<std::vector<int>>& clusters) const;

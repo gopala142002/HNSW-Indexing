@@ -6,6 +6,8 @@
 #include <queue>
 #include <stdexcept>
 #include <functional>
+#include <unordered_set>
+#include <limits>
 
 PCTree::PCTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t num_vectors,int leafCapacity,int numPartitions,int leafClusters)
 {
@@ -442,51 +444,183 @@ PCNode* PCTree::buildNode(std::vector<int>& vectorIndices,const std::vector<floa
 }
 
 
-PCNode* PCTree::findLeaf(const float* query,uint64_t &distanceCounter) const
+
+std::vector<PCNode*> PCTree::findLeafNodes(const float* query,uint64_t& distanceCounter,int beamWidth) const
 {
-    if (!root || query == nullptr)
+    std::vector<PCNode*> result;
+    if (root == nullptr || query == nullptr || beamWidth <= 0)
+        return result;
+
+    struct Candidate
     {
-        return nullptr;
-    }
-    PCNode* current = root;
-    while (current != nullptr && !current->isLeaf)
+        float distance;
+        PCNode* node;
+    };
+
+    struct CandidateCompare
     {
-        float queryProj = dotProduct(query, current->principalComponent.data());
-        size_t childIndex = 0;
-        distanceCounter++;
-        while (childIndex < current->splitPoints.size() && queryProj >= current->splitPoints[childIndex])
+        bool operator()(const Candidate& a, const Candidate& b) const
         {
-            ++childIndex;
+            return a.distance > b.distance;
+        }
+    };
+
+    using MinHeap = std::priority_queue<Candidate,std::vector<Candidate>,CandidateCompare>;
+    const size_t width = static_cast<size_t>(beamWidth);
+    std::vector<Candidate> beam;
+    beam.push_back({0.0f, root});
+
+    while (!beam.empty())
+    {
+        bool allLeaves = true;
+        for (const Candidate& candidate : beam)
+        {
+            if (candidate.node != nullptr && !candidate.node->isLeaf)
+            {
+                allLeaves = false;
+                break;
+            }
+        }
+        if (allLeaves)
+        {
+            result.reserve(beam.size());
+
+            for (const Candidate& candidate : beam)
+            {
+                if (candidate.node != nullptr)
+                    result.push_back(candidate.node);
+            }
+
+            return result;
         }
 
-        // Safety check
-        if (childIndex >= current->children.size())
+        MinHeap candidates;
+
+        for (const Candidate& candidate : beam)
         {
-            childIndex = current->children.size() - 1;
+            PCNode* node = candidate.node;
+            if (node == nullptr)
+                continue;
+
+            if (node->isLeaf)
+            {
+                candidates.push(candidate);
+                continue;
+            }
+
+            if (node->principalComponent.empty() || node->children.empty())
+            {
+                continue;
+            }
+            const float queryProj = dotProduct(query, node->principalComponent.data());
+            ++distanceCounter;
+            for (size_t i = 0; i < node->children.size(); ++i)
+            {
+                PCNode* child = node->children[i];
+                if (child == nullptr)
+                    continue;
+                float projectionDistance = 0.0f;
+
+                if (i > 0 && i - 1 < node->splitPoints.size() && queryProj < node->splitPoints[i - 1])
+                {
+                    projectionDistance = node->splitPoints[i - 1] - queryProj;
+                }
+                else if (i < node->splitPoints.size() && queryProj > node->splitPoints[i])
+                {
+                    projectionDistance = queryProj - node->splitPoints[i];
+                }
+
+                const float score = projectionDistance * projectionDistance;
+                candidates.push({candidate.distance + score, child});
+            }
         }
-        current = current->children[childIndex];
+
+        if (candidates.empty())
+            return result;
+
+        beam.clear();
+        beam.reserve(std::min(width, candidates.size()));
+        while (!candidates.empty() && beam.size() < width)
+        {
+            beam.push_back(candidates.top());
+            candidates.pop();
+        }
     }
-    return current;
+    return result;
 }
 
-int PCTree::searchNN(const float* query,uint64_t &distanceCounter) const
+
+
+int PCTree::searchNN(const float* query,uint64_t& distanceCounter,int beamWidth) const
 {
-    PCNode* leaf = findLeaf(query,distanceCounter);
-    if (leaf == nullptr)
+    if (query == nullptr || beamWidth <= 0)
         return -1;
-    return leaf->representative;
-}
 
+    std::vector<PCNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
 
-std::vector<int> PCTree::searchNNMulti(const float* query,uint64_t &distanceCounter) const
-{
-    PCNode* leaf = findLeaf(query,distanceCounter);
-    if (leaf == nullptr)
+    int bestID = -1;
+    float bestDistance = std::numeric_limits<float>::infinity();
+
+    for (const PCNode* leaf : leaves)
     {
-        return {};
+        if (leaf == nullptr || leaf->representative < 0 || static_cast<size_t>(leaf->representative) >= num_vectors)
+        {
+            continue;
+        }
+
+        const float* vector = getVector(leaf->representative);
+        const float d = squaredL2Distance(query, vector);
+
+        ++distanceCounter;
+
+        if (d < bestDistance)
+        {
+            bestDistance = d;
+            bestID = leaf->representative;
+        }
     }
-    return leaf->leafClusterRepresentatives;
+    return bestID;
 }
+
+
+
+
+std::vector<int> PCTree::searchNNMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const
+{
+    if (query == nullptr || beamWidth <= 0)
+        return {};
+
+    std::vector<PCNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+    using Candidate = std::pair<float, int>;
+    std::priority_queue<Candidate,std::vector<Candidate>,std::greater<Candidate>> candidates;
+    std::unordered_set<int> seen;
+    for (const PCNode* leaf : leaves)
+    {
+        if (leaf == nullptr)
+            continue;
+
+        for (int id : leaf->leafClusterRepresentatives)
+        {
+            if (id < 0 || static_cast<size_t>(id) >= num_vectors || !seen.insert(id).second)
+            {
+                continue;
+            }
+            const float* vector = getVector(id);
+            const float d = squaredL2Distance(query, vector);
+            ++distanceCounter;
+            candidates.emplace(d, id);
+        }
+    }
+    std::vector<int> result;
+    result.reserve(candidates.size());
+    while (!candidates.empty())
+    {
+        result.push_back(candidates.top().second);
+        candidates.pop();
+    }
+    return result;
+}
+
 
 
 int PCTree::getHeight(PCNode* node) const

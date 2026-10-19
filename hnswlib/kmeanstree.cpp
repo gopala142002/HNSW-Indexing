@@ -5,7 +5,11 @@
 #include <numeric>
 #include <random>
 #include <stdexcept>
+#include <utility>
 #include <functional>
+#include <queue>
+#include <unordered_set>
+#include <vector>
 
 KMeansTree::KMeansTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t num_vectors,int numClusters,int leafCapacity,int leafClusters)
 {
@@ -364,40 +368,186 @@ KMeansNode* KMeansTree::buildRecursive(std::vector<int>&& vectorIndices)
 }
 
 
-KMeansNode* KMeansTree::findLeaf(const float* query,uint64_t &distanceCounter) const
+
+std::vector<KMeansNode*> KMeansTree::findLeafNodes(const float* query,uint64_t& distanceCounter,int beamWidth) const
 {
-    if (root == nullptr || query == nullptr)
+    std::vector<KMeansNode*> result;
+
+    if (root == nullptr || query == nullptr || beamWidth <= 0)
+        return result;
+
+    struct Candidate
     {
-        return nullptr;
-    }
-    KMeansNode* current = root;
-    while (current != nullptr && !current->isLeaf)
+        float distance;
+        KMeansNode* node;
+    };
+
+    struct CandidateCompare
     {
-        int nearestChild = findNearestCentroid(query, current->centroids,&distanceCounter);
-        if (nearestChild < 0 || nearestChild >= static_cast<int>(current->children.size()))
+        bool operator()(const Candidate& a, const Candidate& b) const
         {
-            return nullptr;
+            return a.distance > b.distance;
         }
-        current = current->children[nearestChild];
-    }
-    return current;
-}
+    };
 
-int KMeansTree::searchNN(const float* query,uint64_t &distanceCounter) const
-{
-    KMeansNode* leaf = findLeaf(query,distanceCounter);
-    return leaf ? leaf->representative : -1;
-}
+    using MinHeap = std::priority_queue<Candidate,std::vector<Candidate>,CandidateCompare>;
 
-std::vector<int> KMeansTree::searchNNMulti(const float* query,uint64_t &distanceCounter) const
-{
-    KMeansNode* leaf = findLeaf(query,distanceCounter);
-    if (leaf == nullptr)
+    const size_t width = static_cast<size_t>(beamWidth);
+    std::vector<Candidate> beam;
+    beam.push_back({0.0f, root});
+
+    while (!beam.empty())
     {
-        return {};
+        bool allLeaves = true;
+        for (const Candidate& candidate : beam)
+        {
+            if (candidate.node != nullptr &&
+                !candidate.node->isLeaf)
+            {
+                allLeaves = false;
+                break;
+            }
+        }
+
+        if (allLeaves)
+        {
+            result.reserve(beam.size());
+
+            for (const Candidate& candidate : beam)
+            {
+                if (candidate.node != nullptr)
+                    result.push_back(candidate.node);
+            }
+
+            return result;
+        }
+
+
+        MinHeap candidates;
+
+        for (const Candidate& candidate : beam)
+        {
+            KMeansNode* node = candidate.node;
+
+            if (node == nullptr)
+                continue;
+            if (node->isLeaf)
+            {
+                candidates.push(candidate);
+                continue;
+            }
+            const size_t count = std::min(node->children.size(),node->centroids.size());
+            for (size_t i = 0; i < count; ++i)
+            {
+                KMeansNode* child = node->children[i];
+
+                if (child == nullptr)
+                    continue;
+
+                const float d = squaredDistance(node->centroids[i], query);
+
+                ++distanceCounter;
+
+                candidates.push({d, child});
+            }
+        }
+
+        if (candidates.empty())
+            return result;
+
+        beam.clear();
+        beam.reserve(std::min(width, candidates.size()));
+
+        while (!candidates.empty() && beam.size() < width)
+        {
+            beam.push_back(candidates.top());
+            candidates.pop();
+        }
     }
-    return leaf->leafClusterRepresentatives;
+    return result;
 }
+
+
+int KMeansTree::searchNN(const float* query,uint64_t& distanceCounter,int beamWidth) const 
+{
+    if (query == nullptr) 
+    {
+        return -1;
+    }
+    
+    std::vector<KMeansNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+
+    int bestID = -1;
+    float bestDistance = std::numeric_limits<float>::max();
+
+    for (KMeansNode* leaf : leaves) 
+    {
+        if (leaf == nullptr || leaf->representative < 0 || static_cast<size_t>(leaf->representative) >= num_vectors) 
+        {
+            continue;
+        }
+
+        const float* vector = getVector(leaf->representative);
+        float distance = squaredDistance(query, vector);
+        ++distanceCounter;
+
+        if (distance < bestDistance) 
+        {
+            bestDistance = distance;
+            bestID = leaf->representative;
+        }
+    }
+    return bestID;
+}
+
+
+std::vector<int> KMeansTree::searchNNMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const
+{
+    if (query == nullptr || beamWidth <= 0)
+        return {};
+
+    std::vector<KMeansNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+
+    using Candidate = std::pair<float, int>;
+    
+    std::priority_queue<Candidate,std::vector<Candidate>,std::greater<Candidate>> candidates;
+
+    std::unordered_set<int> seen;
+
+    for (const KMeansNode* leaf : leaves)
+    {
+        if (leaf == nullptr)
+            continue;
+
+        for (int id : leaf->leafClusterRepresentatives)
+        {
+            if (id < 0 || static_cast<size_t>(id) >= num_vectors || !seen.insert(id).second)
+            {
+                continue;
+            }
+
+            const float* vector = getVector(id);
+            const float d = squaredDistance(query, vector);
+
+            ++distanceCounter;
+            candidates.emplace(d, id);
+        }
+    }
+
+    std::vector<int> result;
+    result.reserve(candidates.size());
+
+    while (!candidates.empty())
+    {
+        result.push_back(candidates.top().second);
+        candidates.pop();
+    }
+
+    return result;
+}
+
+
+
 
 int KMeansTree::calculateHeight(KMeansNode* node) const
 {

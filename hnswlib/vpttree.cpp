@@ -5,6 +5,8 @@
 #include <random>
 #include <stdexcept>
 #include <functional>
+#include <queue>
+#include <unordered_set>
 
 VPTNode::~VPTNode() 
 {
@@ -484,66 +486,195 @@ void VantagePointTree::preprocessLeafEntryPoints(VPTNode* node)
     }
 }
 
-int VantagePointTree::searchEntryPoint(const float* query,uint64_t &distanceCounter) const
+
+
+int VantagePointTree::searchEntryPoint(const float* query,uint64_t& distanceCounter,int beamWidth) const
 {
-    const VPTNode* node = findLeafNode(query,distanceCounter);
-    if (node == nullptr)
-    {
+    if (query == nullptr || beamWidth <= 0)
         return -1;
+
+    std::vector<const VPTNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+
+    int bestID = -1;
+    float bestDistance = std::numeric_limits<float>::infinity();
+
+    for (const VPTNode* leaf : leaves)
+    {
+        if (leaf == nullptr || leaf->centroidEntryPoint < 0 || static_cast<size_t>(leaf->centroidEntryPoint) >= num_vectors)
+        {
+            continue;
+        }
+
+        const float d = distance(query,getVector(leaf->centroidEntryPoint));
+
+        ++distanceCounter;
+
+        if (d < bestDistance)
+        {
+            bestDistance = d;
+            bestID = leaf->centroidEntryPoint;
+        }
     }
-    return node->centroidEntryPoint;
+    return bestID;
 }
 
 
-const VPTNode* VantagePointTree::findLeafNode(const float* query,uint64_t &distanceCounter) const
-{
-    if (root == nullptr || query == nullptr)
-    {
-        return nullptr;
-    }
-    const VPTNode* current = root;
-    while (current != nullptr && !current->isLeaf)
-    {
-        const float d = distance(query, getVector(current->pivot));
-        distanceCounter++;
-        // Find the child whose distance range contains d
-        size_t childIndex = 0;
-        while (childIndex + 1 < current->childMaxDistances.size() && d > current->childMaxDistances[childIndex])
-        {
-            ++childIndex;
-        }
 
-        // Safety check
-        if (childIndex < current->children.size())
+
+std::vector<const VPTNode*> VantagePointTree::findLeafNodes(const float* query,uint64_t& distanceCounter,int beamWidth) const
+{
+    std::vector<const VPTNode*> result;
+
+    if (root == nullptr || query == nullptr || beamWidth <= 0)
+        return result;
+
+    struct Candidate
+    {
+        float distance;
+        const VPTNode* node;
+    };
+
+    struct CandidateCompare
+    {
+        bool operator()(const Candidate& a, const Candidate& b) const
         {
-            current = current->children[childIndex];
+            return a.distance > b.distance;
         }
-        else
+    };
+
+    using MinHeap = std::priority_queue<Candidate,std::vector<Candidate>,CandidateCompare>;
+    const size_t width = static_cast<size_t>(beamWidth);
+    std::vector<Candidate> beam;
+    beam.push_back({0.0f, root});
+
+    while (!beam.empty())
+    {
+        bool allLeaves = true;
+        for (const Candidate& candidate : beam)
         {
-            return nullptr;
+            if (candidate.node != nullptr && !candidate.node->isLeaf)
+            {
+                allLeaves = false;
+                break;
+            }
+        }
+        if (allLeaves)
+        {
+            result.reserve(beam.size());
+            for (const Candidate& candidate : beam)
+            {
+                if (candidate.node != nullptr)
+                    result.push_back(candidate.node);
+            }
+            return result;
+        }
+        MinHeap candidates;
+        for (const Candidate& candidate : beam)
+        {
+            const VPTNode* node = candidate.node;
+            if (node == nullptr)
+                continue;
+            
+            if (node->isLeaf)
+            {
+                candidates.push(candidate);
+                continue;
+            }
+
+            if (node->pivot < 0 || static_cast<size_t>(node->pivot) >= num_vectors || node->children.empty())
+            {
+                continue;
+            }
+
+            const float d = distance(query, getVector(node->pivot));
+            ++distanceCounter;
+
+            const size_t childCount = std::min(node->children.size(),node->childMaxDistances.size());
+
+            for (size_t i = 0; i < childCount; ++i)
+            {
+                const VPTNode* child = node->children[i];
+                if (child == nullptr)
+                    continue;
+
+                const float lower =(i == 0) ? 0.0f : node->childMaxDistances[i - 1];
+                const float upper = node->childMaxDistances[i];
+                float gap = 0.0f;
+                if (d < lower)
+                    gap = lower - d;
+                else if (d > upper)
+                    gap = d - upper;
+
+                const float localScore = gap * gap;
+                const float totalScore = candidate.distance + localScore;
+                candidates.push({totalScore, child});
+            }
+        }
+        if (candidates.empty())
+            return result;
+
+        beam.clear();
+        beam.reserve(std::min(width, candidates.size()));
+        while (!candidates.empty() && beam.size() < width)
+        {
+            beam.push_back(candidates.top());
+            candidates.pop();
         }
     }
-    return current;
+
+    return result;
 }
 
-std::vector<int> VantagePointTree::searchEntryPointMulti(const float* query,uint64_t &distanceCounter) const
+
+
+std::vector<int> VantagePointTree::searchEntryPointMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const
 {
-    const VPTNode* node = findLeafNode(query,distanceCounter);
-    if (node == nullptr)
-    {
+    if (query == nullptr || beamWidth <= 0)
         return {};
+
+    std::vector<const VPTNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+
+    using Candidate = std::pair<float, int>;
+
+    std::priority_queue<Candidate,std::vector<Candidate>,std::greater<Candidate>> candidates;
+    std::unordered_set<int> seen;
+    for (const VPTNode* leaf : leaves)
+    {
+        if (leaf == nullptr)
+            continue;
+
+        for (int id : leaf->leafClusterRepresentatives)
+        {
+            if (id < 0 || static_cast<size_t>(id) >= num_vectors || !seen.insert(id).second)
+            {
+                continue;
+            }
+            const float d = distance(query, getVector(id));
+            ++distanceCounter;
+            candidates.emplace(d, id);
+        }
     }
-    return node->leafClusterRepresentatives;
+    std::vector<int> result;
+    result.reserve(candidates.size());
+    while (!candidates.empty())
+    {
+        result.push_back(candidates.top().second);
+        candidates.pop();
+    }
+    return result;
 }
 
-int VantagePointTree::searchNN(const float* query,uint64_t &distanceCounter) const
+
+int VantagePointTree::searchNN(const float* query,uint64_t& distanceCounter,int beamWidth) const
 {
-    return searchEntryPoint(query,distanceCounter);
+    return searchEntryPoint(query, distanceCounter, beamWidth);
 }
-std::vector<int> VantagePointTree::searchNNMulti(const float* query,uint64_t &distanceCounter) const
+
+std::vector<int> VantagePointTree::searchNNMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const
 {
-    return searchEntryPointMulti(query,distanceCounter);
+    return searchEntryPointMulti(query, distanceCounter, beamWidth);
 }
+
 
 int VantagePointTree::getHeight() const
 {

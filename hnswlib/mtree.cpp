@@ -4,6 +4,8 @@
 #include <limits>
 #include <stdexcept>
 #include <vector>
+#include <queue>
+#include <unordered_set>
 
 
 MTNode::~MTNode() 
@@ -424,63 +426,172 @@ int MTree::greedySearch(const float* query) const
 }
 
 
-const MTNode* MTree::findLeafNode(const float* query,uint64_t &distanceCounter) const
-{
-    if (root == nullptr || query == nullptr)
-    {
-        return nullptr;
-    }
-    const MTNode* node = root;
-    while (node != nullptr && !node->isLeaf)
-    {
-        if (node->routingEntries.empty())
-        {
-            return nullptr;
-        }
-        int bestEntry = -1;
-        float bestDist = std::numeric_limits<float>::infinity();
-        for (size_t i = 0; i < node->routingEntries.size(); ++i)
-        {
-            const RoutingEntry& entry = node->routingEntries[i];
-            const float d = distance(query, getVector(entry.pivotID));
-            distanceCounter++;
 
-            if (d < bestDist)
+std::vector<const MTNode*> MTree::findLeafNodes(const float* query,uint64_t& distanceCounter,int beamWidth) const
+{
+    std::vector<const MTNode*> result;
+
+    if (root == nullptr || query == nullptr || beamWidth <= 0)
+        return result;
+
+    struct Candidate
+    {
+        float distance;
+        const MTNode* node;
+    };
+
+    struct CandidateCompare
+    {
+        bool operator()(const Candidate& a, const Candidate& b) const
+        {
+            return a.distance > b.distance;
+        }
+    };
+    using MinHeap = std::priority_queue<Candidate,std::vector<Candidate>,CandidateCompare>;
+    const size_t width = static_cast<size_t>(beamWidth);
+    std::vector<Candidate> beam;
+    beam.push_back({0.0f, root});
+    while (!beam.empty())
+    {
+        bool allLeaves = true;
+        for (const Candidate& candidate : beam)
+        {
+            if (candidate.node != nullptr &&
+                !candidate.node->isLeaf)
             {
-                bestDist = d;
-                bestEntry = static_cast<int>(i);
+                allLeaves = false;
+                break;
             }
         }
-        if (bestEntry < 0)
+        if (allLeaves)
         {
-            return nullptr;
+            result.reserve(beam.size());
+            for (const Candidate& candidate : beam)
+            {
+                if (candidate.node != nullptr)
+                    result.push_back(candidate.node);
+            }
+            return result;
         }
-        node = node->routingEntries[bestEntry].child;
+
+        MinHeap candidates;
+        for (const Candidate& candidate : beam)
+        {
+            const MTNode* node = candidate.node;
+            if (node == nullptr)
+                continue;
+
+            if (node->isLeaf)
+            {
+                candidates.push(candidate);
+                continue;
+            }
+
+
+            for (const RoutingEntry& entry : node->routingEntries)
+            {
+                if (entry.child == nullptr)
+                    continue;
+
+                const float* pivot = getVector(entry.pivotID);
+
+                if (pivot == nullptr)
+                    continue;
+
+                const float d = distance(query, pivot);
+                ++distanceCounter;
+
+                candidates.push({d, entry.child});
+            }
+        }
+
+        if (candidates.empty())
+            return result;
+
+        beam.clear();
+        beam.reserve(std::min(width, candidates.size()));
+
+        while (!candidates.empty() && beam.size() < width)
+        {
+            beam.push_back(candidates.top());
+            candidates.pop();
+        }
     }
-    return node;
+
+    return result;
 }
 
 
-int MTree::searchEntryPoint(const float* query,uint64_t &distanceCounter) const
+
+
+int MTree::searchEntryPoint(const float* query,uint64_t& distanceCounter,int beamWidth) const
 {
-    const MTNode* node = findLeafNode(query,distanceCounter);
-    if (node == nullptr)
+    std::vector<const MTNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+
+    int bestID = -1;
+    float bestDistance = std::numeric_limits<float>::infinity();
+
+    for (const MTNode* leaf : leaves)
     {
-        return -1;
+        if (leaf == nullptr || leaf->centroidEntryPoint < 0)
+            continue;
+
+        const float* vec = getVector(leaf->centroidEntryPoint);
+        if (vec == nullptr)
+            continue;
+
+        const float d = distance(query, vec);
+        ++distanceCounter;
+
+        if (d < bestDistance)
+        {
+            bestDistance = d;
+            bestID = leaf->centroidEntryPoint;
+        }
     }
-    return node->centroidEntryPoint;
+    return bestID;
 }
 
 
-std::vector<int> MTree::searchEntryPointMulti(const float* query,uint64_t &distanceCounter) const
+std::vector<int> MTree::searchEntryPointMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const
 {
-    const MTNode* node = findLeafNode(query,distanceCounter);
-    if (node == nullptr)
+    std::vector<const MTNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+
+    using Candidate = std::pair<float, int>;
+
+    std::priority_queue<Candidate,std::vector<Candidate>,std::greater<Candidate>> candidates;
+    std::unordered_set<int> seen;
+
+    for (const MTNode* leaf : leaves)
     {
-        return {};
+        if (leaf == nullptr)
+            continue;
+
+        for (int id : leaf->leafClusterRepresentatives)
+        {
+            if (id < 0 || !seen.insert(id).second)
+                continue;
+
+            const float* vec = getVector(id);
+            if (vec == nullptr)
+                continue;
+
+            const float d = distance(query, vec);
+            ++distanceCounter;
+            candidates.emplace(d, id);
+        }
     }
-    return node->leafClusterRepresentatives;
+    std::vector<int> result;
+    result.reserve(candidates.size());
+    while (!candidates.empty())
+    {
+        result.push_back(candidates.top().second);
+        candidates.pop();
+    }
+    return result;
 }
+
+
 
 int MTree::getHeight() const
 {

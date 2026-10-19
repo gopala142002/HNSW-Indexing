@@ -48,8 +48,8 @@ class KMeansTree
     KMeansTree& operator=(const KMeansTree&) = delete;
     void build();
     void recomputeLeafClusters(int leafClusters);
-    int searchNN(const float* query,uint64_t &distanceCounter) const;
-    std::vector<int> searchNNMulti(const float* query,uint64_t &distanceCounter) const;
+    int searchNN(const float* query, uint64_t& distanceCounter, int beamWidth) const;
+    std::vector<int> searchNNMulti(const float* query,uint64_t &distanceCounter,int beamWidth) const;
     int getHeight() const;
     KMeansNode* root = nullptr;
     
@@ -64,7 +64,7 @@ class KMeansTree
     int leafCapacity;
     int leafClusters;
     
-    KMeansNode* findLeaf(const float* query,uint64_t &distanceCounter) const;
+    std::vector<KMeansNode*> findLeafNodes(const float* query,uint64_t& distanceCounter,int beamWidth) const;
 
     // Number of K-Means iterations at each node.
     static constexpr int MAX_KMEANS_ITERATIONS = 20;

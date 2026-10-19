@@ -467,32 +467,32 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // Print distances for multiple starting seeds.
-    void printMultipleSeedDistances(const char* approach,const void* query_data,const std::vector<tableint>& seed_ids) const 
-    {
-        if (seed_ids.empty()) 
-        {
-            std::cout << "[SEED_DISTANCE] approach=" << approach << " no_seeds_found" << std::endl;
-            return;
-        }
+    // void printMultipleSeedDistances(const char* approach,const void* query_data,const std::vector<tableint>& seed_ids) const 
+    // {
+    //     if (seed_ids.empty()) 
+    //     {
+    //         std::cout << "[SEED_DISTANCE] approach=" << approach << " no_seeds_found" << std::endl;
+    //         return;
+    //     }
 
-        double min_l2 = std::numeric_limits<double>::max();
-        double max_l2 = 0.0;
-        double sum_l2 = 0.0;
+    //     double min_l2 = std::numeric_limits<double>::max();
+    //     double max_l2 = 0.0;
+    //     double sum_l2 = 0.0;
 
-        std::cout << "\n[MULTI_SEED_DISTANCE]"<< " approach=" << approach << " number_of_seeds=" << seed_ids.size()<< std::endl;
+    //     std::cout << "\n[MULTI_SEED_DISTANCE]"<< " approach=" << approach << " number_of_seeds=" << seed_ids.size()<< std::endl;
 
-        for (tableint seed_id : seed_ids) 
-        {
-            double squared_l2 = static_cast<double>(fstdistfunc_(query_data,getDataByInternalId(seed_id),dist_func_param_));
-            double euclidean_l2 = std::sqrt(squared_l2);
-            std::cout<< "  seed_internal_id=" << seed_id<< " seed_label=" << getExternalLabel(seed_id)<< " squared_l2=" << squared_l2<< " euclidean_l2=" << euclidean_l2<< std::endl;
-            min_l2 = std::min(min_l2, euclidean_l2);
-            max_l2 = std::max(max_l2, euclidean_l2);
-            sum_l2 += euclidean_l2;
-        }
+    //     for (tableint seed_id : seed_ids) 
+    //     {
+    //         double squared_l2 = static_cast<double>(fstdistfunc_(query_data,getDataByInternalId(seed_id),dist_func_param_));
+    //         double euclidean_l2 = std::sqrt(squared_l2);
+    //         std::cout<< "  seed_internal_id=" << seed_id<< " seed_label=" << getExternalLabel(seed_id)<< " squared_l2=" << squared_l2<< " euclidean_l2=" << euclidean_l2<< std::endl;
+    //         min_l2 = std::min(min_l2, euclidean_l2);
+    //         max_l2 = std::max(max_l2, euclidean_l2);
+    //         sum_l2 += euclidean_l2;
+    //     }
 
-        std::cout<< "  min_l2=" << min_l2<< " avg_l2=" << sum_l2 / seed_ids.size()<< " max_l2=" << max_l2<< std::endl;
-    }
+    //     std::cout<< "  min_l2=" << min_l2<< " avg_l2=" << sum_l2 / seed_ids.size()<< " max_l2=" << max_l2<< std::endl;
+    // }
 
 
     void buildMTree(int mtree_pivots,int leaf_capacity,int leafClusters) 
@@ -920,7 +920,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // Level 0 single entry point
-    template <bool bare_bone_search = true, bool collect_metrics = false>priority_queue<pair<dist_t, tableint>, vector<pair<dist_t, tableint>>, CompareByFirst> searchBaseLayerST(tableint ep_id,const void *data_point,size_t ef,uint64_t &distanceCounter,BaseFilterFunctor* isIdAllowed = nullptr,BaseSearchStopCondition<dist_t>* stop_condition = nullptr) const 
+    template <bool bare_bone_search = true, bool collect_metrics = false,bool collect_cycles = false>priority_queue<pair<dist_t, tableint>, vector<pair<dist_t, tableint>>, CompareByFirst> searchBaseLayerST(tableint ep_id,const void *data_point,size_t ef,uint64_t &distanceCounter,uint64_t &distanceCycles,BaseFilterFunctor* isIdAllowed = nullptr,BaseSearchStopCondition<dist_t>* stop_condition = nullptr,profilingStats* profiler = nullptr) const 
     {
         VisitedList *vl = visited_list_pool_->getFreeVisitedList();
         vl_type *visited_array = vl->mass;
@@ -933,8 +933,20 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         if (bare_bone_search || (!isMarkedDeleted(ep_id) && ((!isIdAllowed) || (*isIdAllowed)(getExternalLabel(ep_id))))) 
         {
             char* ep_data = getDataByInternalId(ep_id);
+
+            uint64_t distanceCyclesStart = 0;
+
+
+            // Distance Computation
+            if constexpr (collect_cycles)
+                distanceCyclesStart = profiler->readCpuCycles();
             dist_t dist = fstdistfunc_(data_point, ep_data, dist_func_param_);
+            if constexpr (collect_cycles)
+                distanceCycles += profiler->readCpuCycles() - distanceCyclesStart;
             distanceCounter++;
+
+
+
             lowerBound = dist;
             top_candidates.emplace(dist, ep_id);
             if (!bare_bone_search && stop_condition) 
@@ -996,8 +1008,24 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                     visited_array[candidate_id] = visited_array_tag;
 
                     char *currObj1 = (getDataByInternalId(candidate_id));
+
+
+
+                    // Distance Computation
+                    uint64_t distanceCyclesStart = 0;
+                    if constexpr (collect_cycles)
+                    {
+                        distanceCyclesStart = profiler->readCpuCycles();
+                    }
                     dist_t dist = fstdistfunc_(data_point, currObj1, dist_func_param_);
+                    if constexpr (collect_cycles)
+                    {
+                        distanceCycles += profiler->readCpuCycles() - distanceCyclesStart;
+                    }
                     distanceCounter++;
+
+
+
                     bool flag_consider_candidate;
                     if (!bare_bone_search && stop_condition) 
                     {
@@ -2236,7 +2264,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // TRI search with single entry points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchFromEntryPointTri(tableint entry_point,const void* query_data,size_t k,uint64_t &distanceCounter,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchFromEntryPointTri(tableint entry_point,const void* query_data,size_t k,uint64_t &distanceCounter,uint64_t &distanceCycles,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0)
@@ -2248,7 +2276,8 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
-        top_candidates =searchBaseLayerTri(entry_point,query_data,max(ef_, k),distanceCounter,isIdAllowed);
+        top_candidates =top_candidates = searchBaseLayerTri(entry_point,query_data,max(ef_, k),distanceCounter,distanceCycles,isIdAllowed,profiler);
+        
         while (top_candidates.size() > k)
             top_candidates.pop();
 
@@ -2620,7 +2649,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
     // MTree approaches
     // MTree - Normal HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0) 
@@ -2632,7 +2661,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             const float* query_f = reinterpret_cast<const float*>(query_data);
             auto tree_start = std::chrono::high_resolution_clock::now();
-            const int seed = mtree_->searchEntryPoint(query_f,profiler->mtreeDistanceComputations);
+            const int seed = mtree_->searchEntryPoint(query_f,profiler->mtreeDistanceComputations,beamWidth);
             auto tree_end = std::chrono::high_resolution_clock::now();
             if (profiler != nullptr)
             {
@@ -2680,7 +2709,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // MTree - FINGER HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0) 
@@ -2692,7 +2721,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             const float* query_f = reinterpret_cast<const float*>(query_data);
             uint64_t ignoredCounter=0;
-            const int seed = mtree_->searchEntryPoint(query_f,ignoredCounter);
+            const int seed = mtree_->searchEntryPoint(query_f,ignoredCounter,beamWidth);
             if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count) 
             {
                currObj = static_cast<tableint>(seed);
@@ -2709,7 +2738,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // MTree - Tri HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnMTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnMTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -2727,7 +2756,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             const float* query_f =reinterpret_cast<const float*>(query_data);
             uint64_t ignoredCounter=0;
-            const int seed = mtree_->searchEntryPoint(query_f,ignoredCounter);
+            const int seed = mtree_->searchEntryPoint(query_f,ignoredCounter,beamWidth);
             if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count) 
             {
                 currObj = static_cast<tableint>(seed);
@@ -2744,7 +2773,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // MTree -> HNSW Normal with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0)
@@ -2754,7 +2783,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
     
         // Get multiple entry points from MTree
-        std::vector<int> seeds =mtree_->searchEntryPointMulti(query_f,profiler->mtreeDistanceComputationsMulti);
+        std::vector<int> seeds =mtree_->searchEntryPointMulti(query_f,profiler->mtreeDistanceComputationsMulti,beamWidth);
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -2777,7 +2806,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
         // Have to comment out next line
-        printMultipleSeedDistances("MTree-Multi",query_data,entry_points);
+        // printMultipleSeedDistances("MTree-Multi",query_data,entry_points);
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
@@ -2808,7 +2837,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // MTree -> HNSW Finger with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -2821,7 +2850,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // Get all K representatives from the selected leaf
         uint64_t ignoredCounter=0;
-        std::vector<int> seeds =mtree_->searchEntryPointMulti(query_f,ignoredCounter);
+        std::vector<int> seeds =mtree_->searchEntryPointMulti(query_f,ignoredCounter,beamWidth);
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -2854,7 +2883,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // MTree -> HNSW Tri with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnMTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -2867,7 +2896,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // Get all K representatives from the selected leaf
         uint64_t ignoredCounter=0;
-        std::vector<int> seeds = mtree_->searchEntryPointMulti(query_f,ignoredCounter);
+        std::vector<int> seeds = mtree_->searchEntryPointMulti(query_f,ignoredCounter,beamWidth);
 
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
@@ -2903,7 +2932,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
     // VPTree approaches
     // VPTree - Normal HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
 
         priority_queue<pair<dist_t, labeltype>> result;
@@ -2917,7 +2946,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             const float* query_f = reinterpret_cast<const float*>(query_data);
 
             auto tree_start = std::chrono::high_resolution_clock::now();
-            const int seed = vpt_->searchEntryPoint(query_f,profiler->vptreeDistanceComputations);
+            const int seed = vpt_->searchEntryPoint(query_f,profiler->vptreeDistanceComputations,beamWidth);
             auto tree_end =std::chrono::high_resolution_clock::now();
             if (profiler != nullptr)
             {
@@ -2965,7 +2994,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // VPTree - FINGER HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnVPTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnVPTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0) 
@@ -2977,7 +3006,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             const float* query_f = reinterpret_cast<const float*>(query_data);
             uint64_t ignoredCounter=0;
-            const int seed = vpt_->searchEntryPoint(query_f,ignoredCounter);
+            const int seed = vpt_->searchEntryPoint(query_f,ignoredCounter,beamWidth);
             if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count)
             {
                 currObj = static_cast<tableint>(seed);
@@ -2995,7 +3024,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // VPTree - Tri HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnVPTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnVPTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
 
         priority_queue<pair<dist_t, labeltype>> empty;
@@ -3013,7 +3042,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             const float* query_f =reinterpret_cast<const float*>(query_data);
             uint64_t ignoredCounter=0;
-            const int seed = vpt_->searchEntryPoint(query_f,ignoredCounter);
+            const int seed = vpt_->searchEntryPoint(query_f,ignoredCounter,beamWidth);
             if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count)
             {
                 currObj = static_cast<tableint>(seed);
@@ -3031,7 +3060,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // VPTree -> HNSW Normal with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0)
@@ -3041,7 +3070,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
 
         // Get multiple entry points from VPTree
-        std::vector<int> seeds =vpt_->searchEntryPointMulti(query_f,profiler->vptreeDistanceComputationsMulti);
+        std::vector<int> seeds =vpt_->searchEntryPointMulti(query_f,profiler->vptreeDistanceComputationsMulti,beamWidth);
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3064,7 +3093,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
         // Have to comment out next line
-        printMultipleSeedDistances("VPTree-Multi",query_data,entry_points);
+        // printMultipleSeedDistances("VPTree-Multi",query_data,entry_points);
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
@@ -3094,7 +3123,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // VPTree -> HNSW Finger with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3107,7 +3136,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // Get all K representatives from the selected leaf
         uint64_t ignoredCounter=0;
-        std::vector<int> seeds =vpt_->searchEntryPointMulti(query_f,ignoredCounter);
+        std::vector<int> seeds =vpt_->searchEntryPointMulti(query_f,ignoredCounter,beamWidth);
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3140,7 +3169,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // VPTree -> HNSW Tri with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnVPTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3153,7 +3182,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // Get all K representatives from the selected leaf
         uint64_t ignoredCounter=0;
-        std::vector<int> seeds = vpt_->searchEntryPointMulti(query_f,ignoredCounter);
+        std::vector<int> seeds = vpt_->searchEntryPointMulti(query_f,ignoredCounter,beamWidth);
 
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
@@ -3190,7 +3219,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
     // PCTree approaches
     // PCTree - Normal HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
 
         priority_queue<pair<dist_t, labeltype>> result;
@@ -3203,7 +3232,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             const float* query_f = reinterpret_cast<const float*>(query_data);
             auto tree_start =std::chrono::high_resolution_clock::now();
-            int seed = pctree_->searchNN(query_f,profiler->pctreeDistanceComputations);
+            int seed = pctree_->searchNN(query_f,profiler->pctreeDistanceComputations,beamWidth);
             auto tree_end = std::chrono::high_resolution_clock::now();
             if (profiler != nullptr)
             {
@@ -3251,7 +3280,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // PCTree - FINGER HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnPCTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnPCTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0) 
@@ -3263,7 +3292,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             const float* query_f = reinterpret_cast<const float*>(query_data);
             uint64_t ignoredCounter=0;
-            int seed = pctree_->searchNN(query_f,ignoredCounter);
+            int seed = pctree_->searchNN(query_f,ignoredCounter,beamWidth);
             if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
             {
                currObj = static_cast<tableint>(seed);
@@ -3280,7 +3309,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // PCTree - Tri HNSW with Single Entry point
-    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnPCTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>> searchKnnPCTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
 
         priority_queue<pair<dist_t, labeltype>> empty;
@@ -3299,7 +3328,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             const float* query_f =reinterpret_cast<const float*>(query_data);
             uint64_t ignoredCounter=0;
-            int seed = pctree_->searchNN(query_f,ignoredCounter);
+            int seed = pctree_->searchNN(query_f,ignoredCounter,beamWidth);
             if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
             {
                 currObj = static_cast<tableint>(seed);
@@ -3318,7 +3347,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // PCTree -> HNSW Normal with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0)
@@ -3328,7 +3357,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
 
         // Get multiple entry points from PCTree
-        std::vector<int> seeds =pctree_->searchNNMulti(query_f,profiler->pctreeDistanceComputationsMulti);
+        std::vector<int> seeds =pctree_->searchNNMulti(query_f,profiler->pctreeDistanceComputationsMulti,beamWidth);
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3350,7 +3379,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // have to comment out this line
-        printMultipleSeedDistances("PCTree-Multi",query_data,entry_points);
+        // printMultipleSeedDistances("PCTree-Multi",query_data,entry_points);
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
@@ -3380,7 +3409,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // PCTree -> HNSW Finger with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3393,7 +3422,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // Get all K representatives from the selected leaf
         uint64_t ignoredCounter=0;
-        std::vector<int> seeds =pctree_->searchNNMulti(query_f,ignoredCounter);
+        std::vector<int> seeds =pctree_->searchNNMulti(query_f,ignoredCounter,beamWidth);
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3426,7 +3455,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // PCTree -> HNSW Tri with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnPCTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3439,7 +3468,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // Get all K representatives from the selected leaf
         uint64_t ignoredCounter=0;
-        std::vector<int> seeds = pctree_->searchNNMulti(query_f,ignoredCounter);
+        std::vector<int> seeds = pctree_->searchNNMulti(query_f,ignoredCounter,beamWidth);
 
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
@@ -3475,7 +3504,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
     // KMeansTree approaches
     // KMeansTree -> HNSW Normal with Single Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTree(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
     
         priority_queue<pair<dist_t, labeltype>> result;
@@ -3488,7 +3517,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             const float* query_f =reinterpret_cast<const float*>(query_data);
             auto tree_start = std::chrono::high_resolution_clock::now();
-            int seed =kmeanstree_->searchNN(query_f,profiler->kmeansTreeDistanceComputations);
+            int seed =kmeanstree_->searchNN(query_f,profiler->kmeansTreeDistanceComputations,beamWidth);
             auto tree_end = std::chrono::high_resolution_clock::now();
             if (profiler != nullptr)
             {
@@ -3537,7 +3566,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // KMeansTree -> HNSW Finger with Single Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeFinger(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3549,7 +3578,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             const float* query_f =reinterpret_cast<const float*>(query_data);
             uint64_t ignoredCounter=0;
-            const int seed =kmeanstree_->searchNN(query_f,ignoredCounter);
+            const int seed =kmeanstree_->searchNN(query_f,ignoredCounter,beamWidth);
 
             if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count) 
             {
@@ -3568,7 +3597,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
     
     // KMeansTree -> TRI with Single Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeTri(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const 
     {
         priority_queue<pair<dist_t, labeltype>> empty;
 
@@ -3582,7 +3611,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             const float* query_f =reinterpret_cast<const float*>(query_data);
             uint64_t ignoredCounter=0;
-            int seed =kmeanstree_->searchNN(query_f,ignoredCounter);
+            int seed =kmeanstree_->searchNN(query_f,ignoredCounter,beamWidth);
             if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count) 
             {
                 currObj =static_cast<tableint>(seed);
@@ -3601,7 +3630,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // KMeansTree -> HNSW Normal with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0)
@@ -3611,7 +3640,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
 
         // Get multiple entry points from KMeansTree
-        std::vector<int> seeds =kmeanstree_->searchNNMulti(query_f,profiler->kmeansTreeDistanceComputationsMulti);
+        std::vector<int> seeds =kmeanstree_->searchNNMulti(query_f,profiler->kmeansTreeDistanceComputationsMulti,beamWidth);
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3633,7 +3662,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // have to comment out next line
-        printMultipleSeedDistances("KMeansTree-Multi",query_data,entry_points);
+        // printMultipleSeedDistances("KMeansTree-Multi",query_data,entry_points);
 
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
@@ -3664,7 +3693,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // KMeansTree -> HNSW Finger with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeFingerMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3677,7 +3706,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // Get all K representatives from the selected leaf
         uint64_t ignoredCounter=0;
-        std::vector<int> seeds =kmeanstree_->searchNNMulti(query_f,ignoredCounter);
+        std::vector<int> seeds =kmeanstree_->searchNNMulti(query_f,ignoredCounter,beamWidth);
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3710,7 +3739,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     }
 
     // KMeansTree -> HNSW Tri with Multiple Entry Points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchKnnKMeansTreeTriMulti(const void* query_data,size_t k,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr,int beamWidth = 1) const
     {
         priority_queue<pair<dist_t, labeltype>> empty;
         if (cur_element_count == 0)
@@ -3723,7 +3752,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // Get all K representatives from the selected leaf
         uint64_t ignoredCounter=0;
-        std::vector<int> seeds = kmeanstree_->searchNNMulti(query_f,ignoredCounter);
+        std::vector<int> seeds = kmeanstree_->searchNNMulti(query_f,ignoredCounter,beamWidth);
 
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
@@ -3767,10 +3796,20 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     std::priority_queue<std::pair<dist_t, labeltype >> searchKnn(const void *query_data, size_t k, BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const 
     {
         priority_queue<pair<dist_t, labeltype >> result;
-        if (cur_element_count == 0) return result;
+        if (cur_element_count == 0) 
+            return result;
+
+
+
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
 
         tableint currObj = enterpoint_node_;
+
+        const uint64_t distanceCyclesStart = profiler->readCpuCycles();
         dist_t curdist = fstdistfunc_(query_data, getDataByInternalId(enterpoint_node_), dist_func_param_);
+        profiler->hnswDistanceCycles +=profiler->readCpuCycles() - distanceCyclesStart;
+
+
         profiler->hnswUpperLayerDistanceComputations++;
 
         for (int level = maxlevel_; level > 0; level--) 
@@ -3795,7 +3834,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                     if (cand < 0 || cand > max_elements_)
                         throw runtime_error("cand error");
 
+
+                    const uint64_t distanceCyclesStart = profiler->readCpuCycles();
                     dist_t d = fstdistfunc_(query_data, getDataByInternalId(cand), dist_func_param_);
+                    profiler->hnswDistanceCycles +=profiler->readCpuCycles() - distanceCyclesStart;
+
                     profiler->hnswUpperLayerDistanceComputations++;
                     if (d < curdist) 
                     {
@@ -3813,27 +3856,34 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             }
         }
 
+        profiler->hnswUpperLayerCycles += profiler->readCpuCycles() - upperLayerCyclesStart;
+
         // have to comment out line
         // printSeedDistance("HNSW-Baseline", query_data, currObj);
 
 
 
         priority_queue<pair<dist_t, tableint>, vector<pair<dist_t, tableint>>, CompareByFirst> top_candidates;
+
         auto level0_start = std::chrono::high_resolution_clock::now();
+
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
         if (bare_bone_search) 
         {
-            top_candidates = searchBaseLayerST<true>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations,isIdAllowed);
+            top_candidates = searchBaseLayerST<true,false,true>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations,profiler->hnswDistanceCycles,isIdAllowed,nullptr,profiler);
         } 
         else 
         {
-            top_candidates = searchBaseLayerST<false>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations, isIdAllowed);
+            top_candidates = searchBaseLayerST<false,false,true>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations,profiler->hnswDistanceCycles,isIdAllowed,nullptr,profiler);
         }
+
+        profiler->hnswLevel0Cycles += profiler->readCpuCycles() - level0CyclesStart;
         auto level0_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswLevelTimeNs[0] += std::chrono::duration<double, std::nano>(level0_end - level0_start).count();
-        }
+        
+        
+        profiler->hnswLevelTimeNs[0] += std::chrono::duration<double, std::nano>(level0_end - level0_start).count();
 
         while (top_candidates.size() > k) 
         {
@@ -3910,10 +3960,15 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             throw runtime_error("TRI search requested before buildTriDistances().");
         }
 
+
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
         tableint currObj = enterpoint_node_;
         
         // for distance computation
+        const uint64_t triEntryDistanceCyclesStart = profiler->readCpuCycles();
         dist_t curdist =fstdistfunc_(query_data,getDataByInternalId(currObj),dist_func_param_);
+        profiler->triDistanceCycles += profiler->readCpuCycles() - triEntryDistanceCyclesStart;
+        
         // profiler->hnswTriDistanceComputations++;
 
 
@@ -3933,7 +3988,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                     tableint cand = datal[i];
 
                     // for distance computation
+                    const uint64_t triEntryDistanceCyclesStart = profiler->readCpuCycles();
                     dist_t d =fstdistfunc_(query_data,getDataByInternalId(cand),dist_func_param_);
+                    profiler->triDistanceCycles += profiler->readCpuCycles() - triEntryDistanceCyclesStart;
+
+
                     // profiler->hnswTriDistanceComputations++;
 
                     if (d < curdist) 
@@ -3945,8 +4004,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 }
             }
         }
+        profiler->triUpperLayerCycles += profiler->readCpuCycles() - upperLayerCyclesStart;
+
+
+
         auto level0_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointTri(currObj,query_data,k,profiler->hnswTriDistanceComputations,isIdAllowed);
+
+        const uint64_t triLevel0CyclesStart = profiler->readCpuCycles();
+        auto result = searchFromEntryPointTri(currObj,query_data,k,profiler->hnswTriDistanceComputations,profiler->triDistanceCycles,isIdAllowed);
+        profiler->triLevel0Cycles +=profiler->readCpuCycles() - triLevel0CyclesStart;
+
         auto level0_end = std::chrono::high_resolution_clock::now();
         if (profiler != nullptr)
         {

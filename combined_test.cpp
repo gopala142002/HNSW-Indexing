@@ -12,6 +12,7 @@
 #include "hnswlib/hnswlib.h"
 
 
+
 std::vector<float> read_fvecs(const std::string& path, int& dim, int& n) 
 {
     std::ifstream f(path, std::ios::binary);
@@ -105,7 +106,7 @@ std::vector<size_t> extract_ids(std::priority_queue<std::pair<float, hnswlib::la
 
 int main(int argc, char** argv) 
 {
-    const std::string data_dir =(argc > 1)? argv[1]: "./datasets/sift";
+    const std::string data_dir =(argc > 1)? argv[1]: "./datasets/gist";
     const std::string base_path =data_dir + "/base.fvecs";
     const std::string query_path =data_dir + "/query.fvecs";
     const std::string gt_path =data_dir + "/groundtruth.ivecs";
@@ -134,6 +135,9 @@ int main(int argc, char** argv)
     const int pctree_leaf_clusters = 4;
     const int mtree_leaf_clusters = 4;
     const int vpt_leaf_clusters = 4;
+
+
+    const int beam_width = 1;
 
 
 
@@ -278,7 +282,7 @@ int main(int argc, char** argv)
     const size_t vpt_mem_bytes     = hnsw.getVPTreeMemoryBytes();
     const size_t kmeans_mem_bytes  = hnsw.getKMeansTreeMemoryBytes();
 
-    const std::string memory_csv_path = "hnsw_memory_sift.csv";
+    const std::string memory_csv_path = "hnsw_memory_gist.csv";
     std::ofstream memory_csv(memory_csv_path);
     if (!memory_csv)
     {
@@ -389,12 +393,18 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start =std::chrono::high_resolution_clock::now();
+
+
+        const uint64_t cycles_start = profiler.readCpuCycles();
         auto pq_hnsw = hnsw.searchKnn(query,static_cast<size_t>(k),nullptr,&profiler);
+        const uint64_t cycles_end = profiler.readCpuCycles();
+        profiler.hnswTotalCycles += cycles_end - cycles_start;
+
+
         auto end =std::chrono::high_resolution_clock::now();
         time_hnsw_ns += std::chrono::duration<double, std::nano>(end - start).count();
         std::vector<size_t> hnsw_ids =extract_ids(pq_hnsw, k);
         total_recall_hnsw +=recall_at_k(gt_q,gt_dim,hnsw_ids,k);
-
     }
 
     // HNSW -> TRI
@@ -404,7 +414,14 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
+
+
+        const uint64_t cycles_start = profiler.readCpuCycles();
         auto pq_hnsw_tri = hnsw.searchKnnTri(query,static_cast<size_t>(k),nullptr,&profiler);
+        const uint64_t cycles_end = profiler.readCpuCycles();
+        profiler.triTotalCycles += cycles_end - cycles_start;
+
+
         auto end = std::chrono::high_resolution_clock::now();
         time_hnsw_tri_ns += std::chrono::duration<double, std::nano>(end-start).count();
         auto hnsw_tri_ids = extract_ids(pq_hnsw_tri, k);
@@ -433,7 +450,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start =std::chrono::high_resolution_clock::now();
-        auto pq_mtree =hnsw.searchKnnMTree(query,static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_mtree =hnsw.searchKnnMTree(query,static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end =std::chrono::high_resolution_clock::now();
         time_mtree_ns += std::chrono::duration<double, std::nano>(end - start).count();
         auto mtree_ids =extract_ids(pq_mtree,k);
@@ -447,7 +464,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_mtree_tri = hnsw.searchKnnMTreeTri(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_mtree_tri = hnsw.searchKnnMTreeTri(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_mtree_tri_ns += std::chrono::duration<double, std::nano>(end-start).count();
         auto mtree_tri_ids = extract_ids(pq_mtree_tri, k);
@@ -461,7 +478,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start =std::chrono::high_resolution_clock::now();
-        auto pq_mtree_finger =hnsw.searchKnnMTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_mtree_finger =hnsw.searchKnnMTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end =std::chrono::high_resolution_clock::now();
         time_mtree_finger_ns += std::chrono::duration<double, std::nano>(end - start).count();
         auto mtree_finger_ids =extract_ids(pq_mtree_finger,k);
@@ -477,7 +494,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         start = std::chrono::high_resolution_clock::now();
-        auto pq_mtree_multi =hnsw.searchKnnMTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_mtree_multi =hnsw.searchKnnMTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         end = std::chrono::high_resolution_clock::now();
         time_mtree_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto mtree_multi_ids = extract_ids(pq_mtree_multi, k);
@@ -491,7 +508,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_mtree_tri_multi =hnsw.searchKnnMTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_mtree_tri_multi =hnsw.searchKnnMTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_mtree_tri_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto mtree_tri_multi_ids = extract_ids(pq_mtree_tri_multi, k);
@@ -505,7 +522,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_mtree_finger_multi =hnsw.searchKnnMTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_mtree_finger_multi =hnsw.searchKnnMTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_mtree_finger_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto mtree_finger_multi_ids =extract_ids(pq_mtree_finger_multi, k);
@@ -519,7 +536,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start =std::chrono::high_resolution_clock::now();
-        auto pq_pctree =hnsw.searchKnnPCTree(query,static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_pctree =hnsw.searchKnnPCTree(query,static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end =std::chrono::high_resolution_clock::now();
         time_pctree_ns += std::chrono::duration<double, std::nano>(end - start).count();
         std::vector<size_t> pctree_ids =extract_ids(pq_pctree, k);
@@ -533,7 +550,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_pctree_tri = hnsw.searchKnnPCTreeTri(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_pctree_tri = hnsw.searchKnnPCTreeTri(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_pctree_tri_ns += std::chrono::duration<double, std::nano>(end-start).count();
         auto pctree_tri_ids = extract_ids(pq_pctree_tri, k);
@@ -547,7 +564,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start =std::chrono::high_resolution_clock::now();
-        auto pq_pctree_finger =hnsw.searchKnnPCTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_pctree_finger =hnsw.searchKnnPCTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end =std::chrono::high_resolution_clock::now();
         time_pctree_finger_ns += std::chrono::duration<double, std::nano>(end - start).count();
         std::vector<size_t> pctree_finger_ids =extract_ids(pq_pctree_finger,k);
@@ -561,7 +578,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_pctree_multi =hnsw.searchKnnPCTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_pctree_multi =hnsw.searchKnnPCTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_pctree_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto pctree_multi_ids = extract_ids(pq_pctree_multi, k);
@@ -576,7 +593,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_pctree_tri_multi =hnsw.searchKnnPCTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_pctree_tri_multi =hnsw.searchKnnPCTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_pctree_tri_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto pctree_tri_multi_ids = extract_ids(pq_pctree_tri_multi, k);
@@ -590,7 +607,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_pctree_finger_multi =hnsw.searchKnnPCTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_pctree_finger_multi =hnsw.searchKnnPCTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_pctree_finger_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto pctree_finger_multi_ids =extract_ids(pq_pctree_finger_multi, k);
@@ -604,7 +621,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start =std::chrono::high_resolution_clock::now();
-        auto pq_vpt =hnsw.searchKnnVPTree(query,static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_vpt =hnsw.searchKnnVPTree(query,static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end =std::chrono::high_resolution_clock::now();
         time_vpt_ns += std::chrono::duration<double, std::nano>(end - start).count();
         auto vpt_ids =extract_ids(pq_vpt, k);
@@ -618,7 +635,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_vpt_tri = hnsw.searchKnnVPTreeTri(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_vpt_tri = hnsw.searchKnnVPTreeTri(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_vpt_tri_ns += std::chrono::duration<double, std::nano>(end-start).count();
         auto vpt_tri_ids = extract_ids(pq_vpt_tri, k);
@@ -632,7 +649,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start =std::chrono::high_resolution_clock::now();
-        auto pq_vpt_finger =hnsw.searchKnnVPTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_vpt_finger =hnsw.searchKnnVPTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end =std::chrono::high_resolution_clock::now();
         time_vpt_finger_ns += std::chrono::duration<double, std::nano>(end - start).count();
         auto vpt_finger_ids =extract_ids(pq_vpt_finger, k);
@@ -646,7 +663,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_vpt_multi =hnsw.searchKnnVPTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_vpt_multi =hnsw.searchKnnVPTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_vpt_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto vpt_multi_ids = extract_ids(pq_vpt_multi, k);
@@ -661,7 +678,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_vpt_tri_multi =hnsw.searchKnnVPTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_vpt_tri_multi =hnsw.searchKnnVPTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_vpt_tri_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto vpt_tri_multi_ids = extract_ids(pq_vpt_tri_multi, k);
@@ -675,7 +692,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_vpt_finger_multi =hnsw.searchKnnVPTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_vpt_finger_multi =hnsw.searchKnnVPTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_vpt_finger_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto vpt_finger_multi_ids =extract_ids(pq_vpt_finger_multi, k);
@@ -689,7 +706,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans =hnsw.searchKnnKMeansTree(query,static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_kmeans =hnsw.searchKnnKMeansTree(query,static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_kmeans_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_ids =extract_ids(pq_kmeans, k);
@@ -703,7 +720,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans_tri =hnsw.searchKnnKMeansTreeTri(query,static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_kmeans_tri =hnsw.searchKnnKMeansTreeTri(query,static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_kmeans_tri_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_tri_ids =extract_ids(pq_kmeans_tri, k);
@@ -717,7 +734,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans_finger =hnsw.searchKnnKMeansTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_kmeans_finger =hnsw.searchKnnKMeansTreeFinger(query,static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_kmeans_finger_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_finger_ids =extract_ids(pq_kmeans_finger, k);
@@ -731,7 +748,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans_multi =hnsw.searchKnnKMeansTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_kmeans_multi =hnsw.searchKnnKMeansTreeMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_kmeans_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_multi_ids = extract_ids(pq_kmeans_multi, k);
@@ -745,7 +762,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans_tri_multi =hnsw.searchKnnKMeansTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_kmeans_tri_multi =hnsw.searchKnnKMeansTreeTriMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_kmeans_tri_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_tri_multi_ids = extract_ids(pq_kmeans_tri_multi, k);
@@ -760,7 +777,7 @@ int main(int argc, char** argv)
         const int* gt_q =gt.data() +static_cast<size_t>(q) * gt_dim;
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto pq_kmeans_finger_multi =hnsw.searchKnnKMeansTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler);
+        auto pq_kmeans_finger_multi =hnsw.searchKnnKMeansTreeFingerMulti(query, static_cast<size_t>(k),nullptr,&profiler,beam_width);
         auto end = std::chrono::high_resolution_clock::now();
         time_kmeans_finger_multi_ns +=std::chrono::duration<double, std::nano>(end - start).count();
         auto kmeans_finger_multi_ids =extract_ids(pq_kmeans_finger_multi, k);
@@ -949,7 +966,7 @@ int main(int argc, char** argv)
 
     // One summary row per search method, single CSV, this file is overwritten on every run.
     // All timing values below are stored in NANOSECONDS.
-    const std::string csv_path = "hnsw_results_sift.csv";
+    const std::string csv_path = "hnsw_results_gist.csv";
     std::ofstream csv(csv_path);
     if (!csv) 
     {
@@ -1178,7 +1195,7 @@ int main(int argc, char** argv)
         throw std::runtime_error("Q must be positive.");
     }
 
-    const std::string distance_csv_path ="hnsw_distance_computations_sift_leaf_capacity_64.csv";
+    const std::string distance_csv_path ="hnsw_distance_computations_gist_leaf_capacity_64.csv";
 
     std::ofstream distance_csv(distance_csv_path);
 

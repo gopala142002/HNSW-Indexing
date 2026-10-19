@@ -69,7 +69,7 @@ class PCTree
         int findNearestCentroid(const float* vector,const std::vector<std::vector<float>>& centroids) const;
         void initializeLeafCentroids(const std::vector<int>& vectorIndices,int k,std::vector<std::vector<float>>& centroids) const;
         void runLeafKMeans(const std::vector<int>& vectorIndices,std::vector<std::vector<float>>& centroids,std::vector<std::vector<int>>& clusters) const;
-        PCNode* findLeaf(const float* query,uint64_t &distanceCounter) const;
+        std::vector<PCNode*> findLeafNodes(const float* query,uint64_t& distanceCounter,int beamWidth) const;
 
         inline float dotProduct(const float* a, const float* b) const 
         {
@@ -98,8 +98,8 @@ class PCTree
         PCTree(const char* data_level0_memory, size_t data_size, size_t dim,size_t num_vectors, int leafCapacity,int numPartitions,int leafClusters);
         ~PCTree();
         void recomputeLeafClusters(int leafClusters);
-        int searchNN(const float* query,uint64_t &distanceCounter) const;
-        std::vector<int> searchNNMulti(const float* query,uint64_t &distanceCounter) const;
+        int searchNN(const float* query,uint64_t& distanceCounter,int beamWidth) const;
+        std::vector<int> searchNNMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const;
         int getHeight(PCNode* root) const;
         int getHeight() const;
         size_t memoryUsageBytes() const;
