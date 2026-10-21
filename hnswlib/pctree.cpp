@@ -1,4 +1,5 @@
 #include "pctree.h"
+#include "profiling.h"
 #include <cstring>
 #include <cmath>
 #include <algorithm>
@@ -445,7 +446,7 @@ PCNode* PCTree::buildNode(std::vector<int>& vectorIndices,const std::vector<floa
 
 
 
-std::vector<PCNode*> PCTree::findLeafNodes(const float* query,uint64_t& distanceCounter,int beamWidth) const
+std::vector<PCNode*> PCTree::findLeafNodes(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const
 {
     std::vector<PCNode*> result;
     if (root == nullptr || query == nullptr || beamWidth <= 0)
@@ -512,8 +513,14 @@ std::vector<PCNode*> PCTree::findLeafNodes(const float* query,uint64_t& distance
             {
                 continue;
             }
+
+
+            const uint64_t cyclesStart = profiler->readCpuCycles();
             const float queryProj = dotProduct(query, node->principalComponent.data());
+            distanceCycles += profiler->readCpuCycles() - cyclesStart;
             ++distanceCounter;
+
+
             for (size_t i = 0; i < node->children.size(); ++i)
             {
                 PCNode* child = node->children[i];
@@ -551,12 +558,12 @@ std::vector<PCNode*> PCTree::findLeafNodes(const float* query,uint64_t& distance
 
 
 
-int PCTree::searchNN(const float* query,uint64_t& distanceCounter,int beamWidth) const
+int PCTree::searchNN(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const
 {
     if (query == nullptr || beamWidth <= 0)
         return -1;
 
-    std::vector<PCNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+    std::vector<PCNode*> leaves = findLeafNodes(query, distanceCounter, distanceCycles,beamWidth, profiler);
 
     int bestID = -1;
     float bestDistance = std::numeric_limits<float>::infinity();
@@ -569,8 +576,11 @@ int PCTree::searchNN(const float* query,uint64_t& distanceCounter,int beamWidth)
         }
 
         const float* vector = getVector(leaf->representative);
-        const float d = squaredL2Distance(query, vector);
 
+
+        const uint64_t cyclesStart = profiler->readCpuCycles();
+        const float d = squaredL2Distance(query, vector);
+        distanceCycles += profiler->readCpuCycles() - cyclesStart;
         ++distanceCounter;
 
         if (d < bestDistance)
@@ -585,12 +595,12 @@ int PCTree::searchNN(const float* query,uint64_t& distanceCounter,int beamWidth)
 
 
 
-std::vector<int> PCTree::searchNNMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const
+std::vector<int> PCTree::searchNNMulti(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const
 {
     if (query == nullptr || beamWidth <= 0)
         return {};
 
-    std::vector<PCNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+    std::vector<PCNode*> leaves = findLeafNodes(query, distanceCounter, distanceCycles, beamWidth, profiler);
     using Candidate = std::pair<float, int>;
     std::priority_queue<Candidate,std::vector<Candidate>,std::greater<Candidate>> candidates;
     std::unordered_set<int> seen;
@@ -606,7 +616,9 @@ std::vector<int> PCTree::searchNNMulti(const float* query,uint64_t& distanceCoun
                 continue;
             }
             const float* vector = getVector(id);
+            const uint64_t cyclesStart = profiler->readCpuCycles();
             const float d = squaredL2Distance(query, vector);
+            distanceCycles += profiler->readCpuCycles() - cyclesStart;
             ++distanceCounter;
             candidates.emplace(d, id);
         }

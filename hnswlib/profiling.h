@@ -278,6 +278,12 @@ public:
     uint64_t triKMeansTreeMultiUpperLayerCycles = 0;
     uint64_t triKMeansTreeMultiLevel0Cycles = 0;
 
+    // CPU cycles for all levels TRI
+    uint64_t hnswTriAllLevelsTotalCycles = 0;
+    uint64_t hnswTriAllLevelsDistanceCycles = 0;
+    uint64_t hnswTriAllLevelsUpperLayerCycles = 0;
+    uint64_t hnswTriAllLevelsLevel0Cycles = 0;
+
     void reset(size_t num_levels)
     {
         hnswLevelTimeNs.assign(num_levels, 0.0);
@@ -525,6 +531,11 @@ public:
         triKMeansTreeMultiDistanceCycles = 0;
         triKMeansTreeMultiUpperLayerCycles = 0;
         triKMeansTreeMultiLevel0Cycles = 0;
+
+        hnswTriAllLevelsTotalCycles = 0;
+        hnswTriAllLevelsDistanceCycles = 0;
+        hnswTriAllLevelsUpperLayerCycles = 0;
+        hnswTriAllLevelsLevel0Cycles = 0;
     }
 
     public:

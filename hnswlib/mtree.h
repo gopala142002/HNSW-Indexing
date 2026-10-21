@@ -6,6 +6,7 @@
 #include <cstdint>
 
 class MTNode; 
+class profilingStats;
 
 class RoutingEntry 
 {
@@ -55,8 +56,8 @@ class MTree
         void insert(int vectorID);
 
         int greedySearch(const float* query) const;
-        int searchEntryPoint(const float* query,uint64_t &distanceCounter,int beamWidth) const;
-        std::vector<int> searchEntryPointMulti(const float* query,uint64_t &distanceCounter,int beamWidth) const;
+        int searchEntryPoint(const float* query,uint64_t &distanceCounter,uint64_t &distanceCycles,int beamWidth,profilingStats* profiler ) const;
+        std::vector<int> searchEntryPointMulti(const float* query,uint64_t &distanceCounter,uint64_t &distanceCycles,int beamWidth,profilingStats* profiler) const;
         int getHeight() const;
 
         void recomputeLeafClusters(int leafClusters);
@@ -104,7 +105,7 @@ class MTree
         int findNearestToCentroidVec(const std::vector<float>& centroid,const std::vector<int>& vectorIndices) const;
         void preprocessLeafEntryPoints(MTNode* node);
 
-        std::vector<const MTNode*> findLeafNodes(const float* query,uint64_t &distanceCounter,int beamWidth) const;
+        std::vector<const MTNode*> findLeafNodes(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const;
         int findNearestCentroidIdx(const float* vector,const std::vector<std::vector<float>>& centroids) const;
         void initializeLeafCentroids(const std::vector<int>& vectorIndices,int k,std::vector<std::vector<float>>& centroids) const;
         void runLeafKMeans(const std::vector<int>& vectorIndices,std::vector<std::vector<float>>& centroids,std::vector<std::vector<int>>& clusters) const;

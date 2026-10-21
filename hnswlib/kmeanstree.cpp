@@ -1,4 +1,5 @@
 #include "kmeanstree.h"
+#include "profiling.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -369,7 +370,7 @@ KMeansNode* KMeansTree::buildRecursive(std::vector<int>&& vectorIndices)
 
 
 
-std::vector<KMeansNode*> KMeansTree::findLeafNodes(const float* query,uint64_t& distanceCounter,int beamWidth) const
+std::vector<KMeansNode*> KMeansTree::findLeafNodes(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const
 {
     std::vector<KMeansNode*> result;
 
@@ -444,8 +445,9 @@ std::vector<KMeansNode*> KMeansTree::findLeafNodes(const float* query,uint64_t& 
                 if (child == nullptr)
                     continue;
 
+                const uint64_t cyclesStart = profiler->readCpuCycles();
                 const float d = squaredDistance(node->centroids[i], query);
-
+                distanceCycles += profiler->readCpuCycles() - cyclesStart;
                 ++distanceCounter;
 
                 candidates.push({d, child});
@@ -468,15 +470,14 @@ std::vector<KMeansNode*> KMeansTree::findLeafNodes(const float* query,uint64_t& 
 }
 
 
-int KMeansTree::searchNN(const float* query,uint64_t& distanceCounter,int beamWidth) const 
+int KMeansTree::searchNN(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const 
 {
     if (query == nullptr) 
     {
         return -1;
     }
     
-    std::vector<KMeansNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
-
+    std::vector<KMeansNode*> leaves =findLeafNodes(query, distanceCounter, distanceCycles,beamWidth, profiler);
     int bestID = -1;
     float bestDistance = std::numeric_limits<float>::max();
 
@@ -488,7 +489,9 @@ int KMeansTree::searchNN(const float* query,uint64_t& distanceCounter,int beamWi
         }
 
         const float* vector = getVector(leaf->representative);
+        const uint64_t cyclesStart = profiler->readCpuCycles();
         float distance = squaredDistance(query, vector);
+        distanceCycles += profiler->readCpuCycles() - cyclesStart;
         ++distanceCounter;
 
         if (distance < bestDistance) 
@@ -501,12 +504,12 @@ int KMeansTree::searchNN(const float* query,uint64_t& distanceCounter,int beamWi
 }
 
 
-std::vector<int> KMeansTree::searchNNMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const
+std::vector<int> KMeansTree::searchNNMulti(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const 
 {
     if (query == nullptr || beamWidth <= 0)
         return {};
 
-    std::vector<KMeansNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+    std::vector<KMeansNode*> leaves = findLeafNodes(query, distanceCounter, distanceCycles,beamWidth, profiler);
 
     using Candidate = std::pair<float, int>;
     
@@ -527,8 +530,10 @@ std::vector<int> KMeansTree::searchNNMulti(const float* query,uint64_t& distance
             }
 
             const float* vector = getVector(id);
-            const float d = squaredDistance(query, vector);
 
+            const uint64_t cyclesStart = profiler->readCpuCycles();
+            const float d = squaredDistance(query, vector);
+            distanceCycles += profiler->readCpuCycles() - cyclesStart;
             ++distanceCounter;
             candidates.emplace(d, id);
         }

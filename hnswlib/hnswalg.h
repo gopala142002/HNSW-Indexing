@@ -461,7 +461,6 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
     // void printSeedDistance(const char* approach,const void* query_data,tableint seed_id) const 
     // {
     //     double squared_l2 = static_cast<double>(fstdistfunc_(query_data,getDataByInternalId(seed_id),dist_func_param_));
-
     //     std::cout<< "[SEED_DISTANCE]"<< " approach=" << approach<< " seed_internal_id=" << seed_id<< " seed_label=" << getExternalLabel(seed_id)<< " squared_l2=" << squared_l2<< " euclidean_l2=" << std::sqrt(squared_l2)<< std::endl;
     // }
 
@@ -1087,7 +1086,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // level 0 multiple entry point
-    template <bool bare_bone_search = true>priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> searchBaseLayerSTMulti(const std::vector<tableint>& ep_ids,const void *data_point,size_t ef,uint64_t &distanceCounter,BaseFilterFunctor* isIdAllowed = nullptr,BaseSearchStopCondition<dist_t>* stop_condition = nullptr) const
+    template <bool bare_bone_search = true> priority_queue<pair<dist_t, tableint>, vector<pair<dist_t, tableint>>, CompareByFirst>searchBaseLayerSTMulti(const std::vector<tableint>& ep_ids,const void *data_point,size_t ef,uint64_t &distanceCounter,uint64_t &distanceCycles,BaseFilterFunctor* isIdAllowed = nullptr,BaseSearchStopCondition<dist_t>* stop_condition = nullptr,profilingStats* profiler = nullptr) const
     {   
         VisitedList *vl = visited_list_pool_->getFreeVisitedList();
         vl_type *visited_array = vl->mass;
@@ -1104,7 +1103,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 continue;
             visited_array[ep_id] = visited_array_tag;
             char* ep_data = getDataByInternalId(ep_id);
-            dist_t dist = fstdistfunc_(data_point,ep_data,dist_func_param_);
+
+            const uint64_t distanceCyclesStart = profiler->readCpuCycles();
+            dist_t dist = fstdistfunc_(data_point, ep_data, dist_func_param_);
+            distanceCycles += profiler->readCpuCycles() - distanceCyclesStart;
             distanceCounter++;
             candidate_set.emplace(-dist, ep_id);
             if (bare_bone_search || (!isMarkedDeleted(ep_id) && ((!isIdAllowed) || (*isIdAllowed)(getExternalLabel(ep_id)))))
@@ -1161,9 +1163,13 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 if (visited_array[candidate_id] == visited_array_tag)
                     continue;
                 visited_array[candidate_id] = visited_array_tag;
-                char *currObj1 =getDataByInternalId(candidate_id);
-                dist_t dist =fstdistfunc_(data_point,currObj1,dist_func_param_);
+
+                char *currObj1 = getDataByInternalId(candidate_id);
+                const uint64_t distanceCyclesStart = profiler->readCpuCycles();
+                dist_t dist = fstdistfunc_(data_point, currObj1, dist_func_param_);
+                distanceCycles += profiler->readCpuCycles() - distanceCyclesStart;
                 distanceCounter++;
+
                 bool flag_consider_candidate;
                 if (!bare_bone_search && stop_condition)
                 {
@@ -1219,7 +1225,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // FINGER-ACCELERATED BASE LAYER SEARCH METHOD
-    priority_queue<pair<dist_t, tableint>, vector<pair<dist_t, tableint>>, CompareByFirst>searchBaseLayerFinger(tableint ep_id,const void *query_data,size_t ef,uint64_t &distanceCounter,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst>searchBaseLayerFinger(tableint ep_id,const void* query_data,size_t ef,uint64_t& distanceCounter,uint64_t& distanceCycles,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         VisitedList *vl = visited_list_pool_->getFreeVisitedList();
         vl_type *visited_array = vl->mass;
@@ -1239,7 +1245,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         
         if (!isMarkedDeleted(ep_id) && (!isIdAllowed || (*isIdAllowed)(getExternalLabel(ep_id)))) 
         {
+            uint64_t distanceCyclesStart = profiler->readCpuCycles();
             dist_t dist = fstdistfunc_(query_data, getDataByInternalId(ep_id), dist_func_param_);
+            distanceCycles += profiler->readCpuCycles() - distanceCyclesStart;
+
             distanceCounter++;
             lowerBound = dist;
             top_candidates.emplace(dist, ep_id);
@@ -1297,7 +1306,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                         continue;
                 }
 
+                uint64_t distanceCyclesStart = 0;
+                distanceCyclesStart = profiler->readCpuCycles();
                 dist = fstdistfunc_(query_data, getDataByInternalId(cand_id), dist_func_param_);
+                distanceCycles += profiler->readCpuCycles() - distanceCyclesStart;
                 distanceCounter++;
                 if (top_candidates.size() < ef || lowerBound > dist) 
                 {
@@ -1322,7 +1334,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // TRIANGLE-ACCELERATED BASE LAYER SEARCH
-    priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst>searchBaseLayerTri(tableint ep_id,const void *query_data,size_t ef,uint64_t &distanceCounter,BaseFilterFunctor* isIdAllowed = nullptr) const
+    priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst>searchBaseLayerTri(tableint ep_id,const void* query_data,size_t ef,uint64_t& distanceCounter,uint64_t& distanceCycles,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         if (!tri_ready_)
         {
@@ -1336,7 +1348,12 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
         // Distance from query to entry point
+
+        uint64_t distanceCyclesStart = profiler->readCpuCycles();
         dist_t ep_dist = fstdistfunc_(query_data,getDataByInternalId(ep_id),dist_func_param_);
+        distanceCycles +=profiler->readCpuCycles() - distanceCyclesStart;
+
+
         distanceCounter++;
 
 
@@ -1391,7 +1408,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 }
 
                 // Exact squared-L2 distance
+
+                const uint64_t neighborDistanceCyclesStart = profiler->readCpuCycles();
                 dist_t dist = fstdistfunc_(query_data,getDataByInternalId(cand_id),dist_func_param_);
+                distanceCycles += profiler->readCpuCycles() - neighborDistanceCyclesStart;
+
                 distanceCounter++;
 
                 if (top_candidates.size() < ef ||lowerBound > dist)
@@ -2224,7 +2245,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // FINGER search with single entry points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchFromEntryPointFinger(tableint entry_point,const void* query_data,size_t k,uint64_t &distanceCounter,BaseFilterFunctor* isIdAllowed = nullptr) const 
+    std::priority_queue<std::pair<dist_t, labeltype>>searchFromEntryPointFinger(tableint entry_point,const void* query_data,size_t k,uint64_t& distanceCounter,uint64_t& distanceCycles,BaseFilterFunctor* isIdAllowed,profilingStats* profiler) const
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0) 
@@ -2237,16 +2258,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             bool bare_bone_search = !num_deleted_ && !isIdAllowed;
             if (bare_bone_search) 
             {
-                top_candidates = searchBaseLayerST<true>(entry_point, query_data, max(ef_, k),distanceCounter, isIdAllowed);
+                top_candidates = searchBaseLayerST<true, false, true>(entry_point, query_data, max(ef_, k),distanceCounter, distanceCycles,isIdAllowed, nullptr, profiler);
             } 
             else 
             {
-                top_candidates = searchBaseLayerST<false>(entry_point, query_data, max(ef_, k),distanceCounter, isIdAllowed);
+                top_candidates = searchBaseLayerST<false>(entry_point, query_data, max(ef_, k),distanceCounter, distanceCycles,isIdAllowed, nullptr, profiler);
             }
         } 
         else 
         {
-            top_candidates = searchBaseLayerFinger(entry_point, query_data, max(ef_, k), distanceCounter,isIdAllowed);
+            top_candidates = searchBaseLayerFinger(entry_point, query_data, max(ef_, k),distanceCounter, distanceCycles,isIdAllowed, profiler);
         }
 
         while (top_candidates.size() > k)
@@ -2276,8 +2297,8 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
-        top_candidates =top_candidates = searchBaseLayerTri(entry_point,query_data,max(ef_, k),distanceCounter,distanceCycles,isIdAllowed,profiler);
-        
+        top_candidates = searchBaseLayerTri(entry_point,query_data,max(ef_, k),distanceCounter,distanceCycles,isIdAllowed,profiler);
+
         while (top_candidates.size() > k)
             top_candidates.pop();
 
@@ -2292,7 +2313,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // FINGER search with multiple entry points
-    std::priority_queue<std::pair<dist_t, labeltype>>searchFromEntryPointFingerMulti(const std::vector<tableint>& entry_points,const void* query_data,size_t k, uint64_t& distanceCounter,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>>searchFromEntryPointFingerMulti(const std::vector<tableint>& entry_points,const void* query_data,size_t k,uint64_t& distanceCounter,uint64_t& distanceCycles,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0 || entry_points.empty())
@@ -2306,11 +2327,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             bool bare_bone_search = !num_deleted_ && !isIdAllowed;
             if (bare_bone_search)
             {
-                top_candidates = searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),distanceCounter,isIdAllowed);
+                top_candidates = searchBaseLayerSTMulti<true>(entry_points, query_data, max(ef_, k),distanceCounter, distanceCycles,isIdAllowed, nullptr, profiler);
             }    
             else
             {
-                top_candidates =searchBaseLayerSTMulti<false>(entry_points,query_data,max(ef_, k),distanceCounter,isIdAllowed);
+                top_candidates = searchBaseLayerSTMulti<false>(entry_points, query_data, max(ef_, k),distanceCounter, distanceCycles,isIdAllowed, nullptr, profiler);
             }    
         }    
         else
@@ -2345,8 +2366,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
                 visited_array[ep_id] = visited_array_tag;    
 
-                dist_t dist =fstdistfunc_(query_data,getDataByInternalId(ep_id),dist_func_param_);
+                const uint64_t distanceCyclesStart = profiler->readCpuCycles();
+                dist_t dist = fstdistfunc_(query_data, getDataByInternalId(ep_id), dist_func_param_);
+                distanceCycles += profiler->readCpuCycles() - distanceCyclesStart;
                 distanceCounter++;
+
                 candidate_set.emplace(-dist, ep_id);
                 if (!isMarkedDeleted(ep_id) && (!isIdAllowed ||(*isIdAllowed)(getExternalLabel(ep_id))))
                 {
@@ -2419,8 +2443,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                         }    
                     }    
 
-                    dist_t dist =fstdistfunc_(query_data,getDataByInternalId(cand_id),dist_func_param_);
+                    const uint64_t distanceCyclesStart = profiler->readCpuCycles();
+                    dist_t dist = fstdistfunc_(query_data, getDataByInternalId(cand_id), dist_func_param_);distanceCycles += profiler->readCpuCycles() - distanceCyclesStart;
                     distanceCounter++;
+
                     if (top_candidates.size() < max(ef_, k) || lowerBound > dist)
                     {
                         candidate_set.emplace(-dist, cand_id);
@@ -2455,7 +2481,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
     // TRI search with multiple entry points
-    std::priority_queue<std::pair<dist_t, labeltype>> searchFromEntryPointTriMulti(const std::vector<tableint>& entry_points,const void* query_data,size_t k,uint64_t &distanceCounter,BaseFilterFunctor* isIdAllowed = nullptr) const
+    std::priority_queue<std::pair<dist_t, labeltype>> searchFromEntryPointTriMulti(const std::vector<tableint>& entry_points,const void* query_data,size_t k,uint64_t &distanceCounter,uint64_t &distanceCycles,BaseFilterFunctor* isIdAllowed = nullptr,profilingStats* profiler = nullptr) const
     {
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0 || entry_points.empty())
@@ -2480,8 +2506,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 continue;
 
             visited_array[ep_id] = visited_array_tag;
-            dist_t dist = fstdistfunc_(query_data,getDataByInternalId(ep_id),dist_func_param_);
+            const uint64_t distanceCyclesStart = profiler->readCpuCycles();
+            dist_t dist = fstdistfunc_(query_data, getDataByInternalId(ep_id), dist_func_param_);
+            distanceCycles += profiler->readCpuCycles() - distanceCyclesStart;
             distanceCounter++;
+
             candidate_set.emplace(-dist, ep_id);
             if (!isMarkedDeleted(ep_id) &&(!isIdAllowed || (*isIdAllowed)(getExternalLabel(ep_id))))
             {
@@ -2524,7 +2553,9 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                     continue;
                 }
 
-                dist_t dist = fstdistfunc_(query_data,getDataByInternalId(cand_id),dist_func_param_);
+                const uint64_t distanceCyclesStart = profiler->readCpuCycles();
+                dist_t dist = fstdistfunc_(query_data, getDataByInternalId(cand_id), dist_func_param_);
+                distanceCycles += profiler->readCpuCycles() - distanceCyclesStart;
                 distanceCounter++;
 
                 if (top_candidates.size() < ef_search || lowerBound > dist)
@@ -2657,21 +2688,22 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         tableint currObj = enterpoint_node_;
         
+
+        const uint64_t hnswMTreeUpperLayerCyclesStart = profiler->readCpuCycles();
         if (mtree_ != nullptr) 
         {
             const float* query_f = reinterpret_cast<const float*>(query_data);
             auto tree_start = std::chrono::high_resolution_clock::now();
-            const int seed = mtree_->searchEntryPoint(query_f,profiler->mtreeDistanceComputations,beamWidth);
+            const int seed = mtree_->searchEntryPoint(query_f,profiler->mtreeDistanceComputations,profiler->hnswMTreeDistanceCycles,beamWidth,profiler);
             auto tree_end = std::chrono::high_resolution_clock::now();
-            if (profiler != nullptr)
-            {
-                profiler->mtreeTimeNs += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-            }
+            profiler->mtreeTimeNs += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+            
             if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count) 
             {    
                 currObj = static_cast<tableint>(seed);
             }
         }
+        profiler->hnswMTreeUpperLayerCycles += profiler->readCpuCycles() - hnswMTreeUpperLayerCyclesStart;
 
 
         // Have to comment out next line
@@ -2679,17 +2711,17 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+
         auto tree_start = std::chrono::high_resolution_clock::now();
+        const uint64_t hnswMTreeLevel0CyclesStart = profiler->readCpuCycles();
         if (bare_bone_search) 
         {
-            top_candidates = searchBaseLayerST<true>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations_MTree,isIdAllowed);
+            top_candidates = searchBaseLayerST<true, false, true>(currObj,query_data,max(ef_, k),profiler->hnswDistanceComputations_MTree,profiler->hnswMTreeDistanceCycles,isIdAllowed,nullptr,profiler);
         } 
         else 
         {
-            top_candidates = searchBaseLayerST<false>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations_MTree,isIdAllowed);
+            top_candidates = searchBaseLayerST<false, false, true>(currObj,query_data,max(ef_, k),profiler->hnswDistanceComputations_MTree,profiler->hnswMTreeDistanceCycles,isIdAllowed,nullptr,profiler);
         }
-
-        
         while (top_candidates.size() > k) 
         {
             top_candidates.pop();
@@ -2700,11 +2732,9 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first, getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        profiler->hnswMTreeLevel0Cycles +=profiler->readCpuCycles() - hnswMTreeLevel0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswLevel0_MTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswLevel0_MTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
         return result;
     }
 
@@ -2717,23 +2747,31 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         tableint currObj = enterpoint_node_;
     
+
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
         if (mtree_ != nullptr) 
         {
             const float* query_f = reinterpret_cast<const float*>(query_data);
             uint64_t ignoredCounter=0;
-            const int seed = mtree_->searchEntryPoint(query_f,ignoredCounter,beamWidth);
+            const int seed = mtree_->searchEntryPoint(query_f,ignoredCounter,profiler->fingerMTreeDistanceCycles,1,profiler);
             if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count) 
             {
                currObj = static_cast<tableint>(seed);
             }
         }
+        profiler->fingerMTreeUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
+
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result =  searchFromEntryPointFinger(currObj, query_data, k,profiler->hnswFingerDistanceComputations_MTree,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        auto result = searchFromEntryPointFinger(currObj, query_data, k,profiler->hnswFingerDistanceComputations_MTree,profiler->fingerMTreeDistanceCycles,isIdAllowed, profiler);
+
+        profiler->fingerMTreeLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswFingerLevel0_MTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswFingerLevel0_MTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        
         return result;
     }
 
@@ -2751,24 +2789,30 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         tableint currObj = enterpoint_node_;
-    
+        
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
         if (mtree_ != nullptr) 
         {
             const float* query_f =reinterpret_cast<const float*>(query_data);
             uint64_t ignoredCounter=0;
-            const int seed = mtree_->searchEntryPoint(query_f,ignoredCounter,beamWidth);
+            const int seed = mtree_->searchEntryPoint(query_f,profiler->mtreeDistanceComputations,profiler->triMTreeDistanceCycles,beamWidth,profiler);
             if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count) 
             {
                 currObj = static_cast<tableint>(seed);
             }
         }
+        profiler->triMTreeUpperLayerCycles += profiler->readCpuCycles() - upperLayerCyclesStart;
+
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointTri(currObj,query_data,k,profiler->hnswTriDistanceComputations_MTree,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+        auto result = searchFromEntryPointTri(currObj, query_data, k,profiler->hnswTriDistanceComputations_MTree,profiler->triMTreeDistanceCycles,isIdAllowed, profiler);
+
+        profiler->triMTreeLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswTriLevel0_MTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswTriLevel0_MTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        
         return result;
     }
 
@@ -2783,7 +2827,9 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
     
         // Get multiple entry points from MTree
-        std::vector<int> seeds =mtree_->searchEntryPointMulti(query_f,profiler->mtreeDistanceComputationsMulti,beamWidth);
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        std::vector<int> seeds = mtree_->searchEntryPointMulti(query_f,profiler->mtreeDistanceComputationsMulti,profiler->hnswMTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->hnswMTreeMultiUpperLayerCycles += profiler->readCpuCycles() - upperLayerCyclesStart;
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -2810,14 +2856,17 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+        
+        
         auto tree_start = std::chrono::high_resolution_clock::now();
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
         if (bare_bone_search)
         {
-            top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),profiler->hnswDistanceComputations_MTreeMulti,isIdAllowed);
+            top_candidates = searchBaseLayerSTMulti<true>(entry_points, query_data, max(ef_, k),profiler->hnswDistanceComputations_MTreeMulti,profiler->hnswMTreeMultiDistanceCycles,isIdAllowed, nullptr, profiler);
         }
         else
         {
-            top_candidates =searchBaseLayerSTMulti<false>(entry_points,query_data,max(ef_, k),profiler->hnswDistanceComputations_MTreeMulti,isIdAllowed);
+            top_candidates = searchBaseLayerSTMulti<false>(entry_points, query_data, max(ef_, k),profiler->hnswDistanceComputations_MTreeMulti,profiler->hnswMTreeMultiDistanceCycles,isIdAllowed, nullptr, profiler);
         }
         while (top_candidates.size() > k)
             top_candidates.pop();
@@ -2827,11 +2876,12 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first,getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        
+
+        profiler->hnswMTreeMultiLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswLevel0MTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswLevel0MTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+        
         return result;
     }
 
@@ -2849,8 +2899,12 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
 
         // Get all K representatives from the selected leaf
-        uint64_t ignoredCounter=0;
-        std::vector<int> seeds =mtree_->searchEntryPointMulti(query_f,ignoredCounter,beamWidth);
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        uint64_t ignoredCounter = 0;
+        std::vector<int> seeds = mtree_->searchEntryPointMulti(query_f,ignoredCounter,profiler->fingerMTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->fingerMTreeMultiUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
+
+
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -2872,13 +2926,17 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW Finger search using ALL selected entry points
+
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointFingerMulti(entry_points,query_data,k,profiler->hnswFingerDistanceComputations_MTreeMulti,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+        auto result = searchFromEntryPointFingerMulti(entry_points, query_data, k,profiler->hnswFingerDistanceComputations_MTreeMulti,profiler->fingerMTreeMultiDistanceCycles,isIdAllowed, profiler);
+
+        profiler->fingerMTreeMultiLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswFingerLevel0MTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswFingerLevel0MTreeMulti +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
         return result;
     }
 
@@ -2895,8 +2953,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
 
         // Get all K representatives from the selected leaf
-        uint64_t ignoredCounter=0;
-        std::vector<int> seeds = mtree_->searchEntryPointMulti(query_f,ignoredCounter,beamWidth);
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        uint64_t ignoredCounter = 0;
+        std::vector<int> seeds = mtree_->searchEntryPointMulti(query_f,ignoredCounter,profiler->triMTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->triMTreeMultiUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
 
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
@@ -2920,12 +2980,14 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // HNSW TRI search using ALL selected entry points
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result =  searchFromEntryPointTriMulti(entry_points,query_data,k,profiler->hnswTriDistanceComputations_MTreeMulti,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+        auto result = searchFromEntryPointTriMulti(entry_points, query_data, k,profiler->hnswTriDistanceComputations_MTreeMulti,profiler->triMTreeMultiDistanceCycles,isIdAllowed, profiler);
+
+        profiler->triMTreeMultiLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswTriLevel0MTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswTriLevel0MTreeMulti +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
         return result;
     }
 
@@ -2941,12 +3003,14 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         tableint currObj = enterpoint_node_;
 
+
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
         if (vpt_ != nullptr) 
         {
             const float* query_f = reinterpret_cast<const float*>(query_data);
 
             auto tree_start = std::chrono::high_resolution_clock::now();
-            const int seed = vpt_->searchEntryPoint(query_f,profiler->vptreeDistanceComputations,beamWidth);
+            const int seed = vpt_->searchEntryPoint(query_f,profiler->vptreeDistanceComputations,profiler->hnswVPTreeDistanceCycles,beamWidth,profiler);
             auto tree_end =std::chrono::high_resolution_clock::now();
             if (profiler != nullptr)
             {
@@ -2959,22 +3023,27 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 currObj = static_cast<tableint>(seed);
             }
         }
+        profiler->hnswVPTreeUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
 
         // Have to comment out next line
         // printSeedDistance("VPTree",query_data,currObj);
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
-        auto tree_start = std::chrono::high_resolution_clock::now();
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
-        if (bare_bone_search) 
-        {
-            top_candidates = searchBaseLayerST<true>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations_VPTree,isIdAllowed);
-        }
-        else 
-        {
-            top_candidates = searchBaseLayerST<false>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations_VPTree,isIdAllowed);
-        }
 
+
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        if (bare_bone_search)
+        {
+            top_candidates = searchBaseLayerST<true, false, true>(currObj,query_data,max(ef_, k),profiler->hnswDistanceComputations_VPTree,profiler->hnswVPTreeDistanceCycles,isIdAllowed,nullptr,profiler);
+        }
+        else
+        {
+            top_candidates = searchBaseLayerST<false, false, true>(currObj,query_data,max(ef_, k),profiler->hnswDistanceComputations_VPTree,profiler->hnswVPTreeDistanceCycles,isIdAllowed,nullptr,profiler);
+        }
         while (top_candidates.size() > k) 
         {
             top_candidates.pop();
@@ -2985,11 +3054,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first, getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        profiler->hnswVPTreeLevel0Cycles += profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswLevel0_VPTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswLevel0_VPTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
+
         return result;
     }
 
@@ -3002,24 +3071,33 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         tableint currObj = enterpoint_node_;
        
-        if (vpt_ != nullptr) 
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+
+        if (vpt_ != nullptr)
         {
             const float* query_f = reinterpret_cast<const float*>(query_data);
-            uint64_t ignoredCounter=0;
-            const int seed = vpt_->searchEntryPoint(query_f,ignoredCounter,beamWidth);
-            if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count)
+            uint64_t ignoredCounter = 0;
+
+            const int seed = vpt_->searchEntryPoint(query_f,ignoredCounter,profiler->fingerVPTreeDistanceCycles,beamWidth,profiler);
+            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
             {
                 currObj = static_cast<tableint>(seed);
             }
         }
+        profiler->fingerVPTreeUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
 
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointFinger(currObj, query_data, k, profiler->hnswFingerDistanceComputations_VPTree,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        auto result = searchFromEntryPointFinger(currObj, query_data, k,profiler->hnswFingerDistanceComputations_VPTree,profiler->fingerVPTreeDistanceCycles,isIdAllowed, profiler);
+
+
+        profiler->fingerVPTreeLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswFingerLevel0_VPTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswFingerLevel0_VPTree +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
+
         return result;
     }
 
@@ -3038,23 +3116,33 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         tableint currObj = enterpoint_node_;
 
-        if (vpt_ != nullptr) 
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+
+        if (vpt_ != nullptr)
         {
-            const float* query_f =reinterpret_cast<const float*>(query_data);
-            uint64_t ignoredCounter=0;
-            const int seed = vpt_->searchEntryPoint(query_f,ignoredCounter,beamWidth);
-            if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count)
+            const float* query_f = reinterpret_cast<const float*>(query_data);
+            uint64_t ignoredCounter = 0;
+
+            const int seed = vpt_->searchEntryPoint(query_f,ignoredCounter,profiler->triVPTreeDistanceCycles,beamWidth,profiler);
+
+            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
             {
                 currObj = static_cast<tableint>(seed);
             }
         }
+        profiler->triVPTreeUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointTri(currObj,query_data,k,profiler->hnswTriDistanceComputations_VPTree,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        auto result = searchFromEntryPointTri(currObj, query_data, k,profiler->hnswTriDistanceComputations_VPTree,profiler->triVPTreeDistanceCycles,isIdAllowed, profiler);
+
+
+        profiler->triVPTreeLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswTriLevel0_VPTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswTriLevel0_VPTree +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
         return result;
     }
 
@@ -3070,7 +3158,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
 
         // Get multiple entry points from VPTree
-        std::vector<int> seeds =vpt_->searchEntryPointMulti(query_f,profiler->vptreeDistanceComputationsMulti,beamWidth);
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        std::vector<int> seeds = vpt_->searchEntryPointMulti(query_f,profiler->vptreeDistanceComputationsMulti,profiler->hnswVPTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->hnswVPTreeMultiUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
+
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3095,16 +3186,22 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         // Have to comment out next line
         // printMultipleSeedDistances("VPTree-Multi",query_data,entry_points);
 
+
+        
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+
+
         auto tree_start = std::chrono::high_resolution_clock::now();
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
         if (bare_bone_search)
         {
-            top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),profiler->hnswDistanceComputations_VPTreeMulti,isIdAllowed);
+            top_candidates = searchBaseLayerSTMulti<true>(entry_points, query_data, max(ef_, k),profiler->hnswDistanceComputations_VPTreeMulti,profiler->hnswVPTreeMultiDistanceCycles,isIdAllowed, nullptr, profiler);
         }
         else
         {
-            top_candidates =searchBaseLayerSTMulti<false>(entry_points,query_data,max(ef_, k),profiler->hnswDistanceComputations_VPTreeMulti,isIdAllowed);
+            top_candidates = searchBaseLayerSTMulti<false>(entry_points, query_data, max(ef_, k),profiler->hnswDistanceComputations_VPTreeMulti,profiler->hnswVPTreeMultiDistanceCycles,isIdAllowed, nullptr, profiler);
         }
         while (top_candidates.size() > k)
             top_candidates.pop();
@@ -3114,11 +3211,12 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first,getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+
+
+        profiler->hnswVPTreeMultiLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswLevel0VPTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswLevel0VPTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
         return result;
     }
 
@@ -3135,8 +3233,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
 
         // Get all K representatives from the selected leaf
-        uint64_t ignoredCounter=0;
-        std::vector<int> seeds =vpt_->searchEntryPointMulti(query_f,ignoredCounter,beamWidth);
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        uint64_t ignoredCounter = 0;
+        std::vector<int> seeds = vpt_->searchEntryPointMulti(query_f,ignoredCounter,profiler->fingerVPTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->fingerVPTreeMultiUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
+
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3158,13 +3259,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW Finger search using ALL selected entry points
+
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointFingerMulti(entry_points,query_data,k,profiler->hnswFingerDistanceComputations_VPTreeMulti,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        auto result = searchFromEntryPointFingerMulti(entry_points, query_data, k,profiler->hnswFingerDistanceComputations_VPTreeMulti,profiler->fingerVPTreeMultiDistanceCycles,isIdAllowed, profiler);
+
+        profiler->fingerVPTreeMultiLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswFingerLevel0VPTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswFingerLevel0VPTreeMulti +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
         return result;
     }
 
@@ -3181,8 +3287,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
 
         // Get all K representatives from the selected leaf
-        uint64_t ignoredCounter=0;
-        std::vector<int> seeds = vpt_->searchEntryPointMulti(query_f,ignoredCounter,beamWidth);
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        uint64_t ignoredCounter = 0;
+        std::vector<int> seeds = vpt_->searchEntryPointMulti(query_f,ignoredCounter,profiler->triVPTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->triVPTreeMultiUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
 
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
@@ -3205,13 +3313,17 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW TRI search using ALL selected entry points
+
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointTriMulti(entry_points,query_data,k,profiler->hnswTriDistanceComputations_VPTreeMulti,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+        auto result = searchFromEntryPointTriMulti(entry_points, query_data, k,profiler->hnswTriDistanceComputations_VPTreeMulti,profiler->triVPTreeMultiDistanceCycles,isIdAllowed, profiler);
+
+        profiler->triVPTreeMultiLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswTriLevel0VPTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswTriLevel0VPTreeMulti +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
         return result;
     }
 
@@ -3228,37 +3340,40 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         tableint currObj = enterpoint_node_;
         
-        if (pctree_ != nullptr) 
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+
+        if (pctree_ != nullptr)
         {
             const float* query_f = reinterpret_cast<const float*>(query_data);
-            auto tree_start =std::chrono::high_resolution_clock::now();
-            int seed = pctree_->searchNN(query_f,profiler->pctreeDistanceComputations,beamWidth);
+            auto tree_start = std::chrono::high_resolution_clock::now();
+            int seed = pctree_->searchNN(query_f,profiler->pctreeDistanceComputations,profiler->hnswPCTreeDistanceCycles,beamWidth,profiler);
             auto tree_end = std::chrono::high_resolution_clock::now();
-            if (profiler != nullptr)
-            {
-                profiler->pctreeTimeNs +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-            }
-
+            profiler->pctreeTimeNs +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
             if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
             {
                 currObj = static_cast<tableint>(seed);
             }
         }
-
+        profiler->hnswPCTreeUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
 
         // Have to comment out next line
         // printSeedDistance("PCTree",query_data,currObj);
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
-        auto tree_start = std::chrono::high_resolution_clock::now();
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+
+
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
         if (bare_bone_search) 
         {
-            top_candidates = searchBaseLayerST<true>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations_PCTree,isIdAllowed);
+            top_candidates = searchBaseLayerST<true, false, true>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations_PCTree,profiler->hnswPCTreeDistanceCycles,isIdAllowed, nullptr, profiler);
         } 
         else 
         {
-            top_candidates = searchBaseLayerST<false>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations_PCTree,isIdAllowed);
+            top_candidates = searchBaseLayerST<false, false, true>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations_PCTree,profiler->hnswPCTreeDistanceCycles,isIdAllowed, nullptr, profiler);
         }
 
         while (top_candidates.size() > k) 
@@ -3271,11 +3386,13 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first, getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+
+
+        profiler->hnswPCTreeLevel0Cycles += profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswLevel0_PCTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswLevel0_PCTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
+
         return result;
     }
 
@@ -3288,23 +3405,30 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         tableint currObj = enterpoint_node_;
 
-        if (pctree_ != nullptr) 
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+
+        if (pctree_ != nullptr)
         {
             const float* query_f = reinterpret_cast<const float*>(query_data);
-            uint64_t ignoredCounter=0;
-            int seed = pctree_->searchNN(query_f,ignoredCounter,beamWidth);
+            uint64_t ignoredCounter = 0;
+            int seed = pctree_->searchNN(query_f,ignoredCounter,profiler->fingerPCTreeDistanceCycles,beamWidth,profiler);
             if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
             {
-               currObj = static_cast<tableint>(seed);
+                currObj = static_cast<tableint>(seed);
             }
         }
+        profiler->fingerPCTreeUpperLayerCycles += profiler->readCpuCycles() - upperLayerCyclesStart;
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result=searchFromEntryPointFinger(currObj, query_data,k,profiler->hnswFingerDistanceComputations_PCTree,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        auto result = searchFromEntryPointFinger(currObj, query_data, k,profiler->hnswFingerDistanceComputations_PCTree,profiler->fingerPCTreeDistanceCycles,isIdAllowed, profiler);
+
+        profiler->fingerPCTreeLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswFingerLevel0_PCTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswFingerLevel0_PCTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
         return result;
     }
 
@@ -3324,25 +3448,33 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         tableint currObj = enterpoint_node_;
         // PCTree finds the starting point
         
-        if (pctree_ != nullptr) 
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        if (pctree_ != nullptr)
         {
-            const float* query_f =reinterpret_cast<const float*>(query_data);
-            uint64_t ignoredCounter=0;
-            int seed = pctree_->searchNN(query_f,ignoredCounter,beamWidth);
+            const float* query_f = reinterpret_cast<const float*>(query_data);
+            uint64_t ignoredCounter = 0;
+            int seed = pctree_->searchNN(query_f,ignoredCounter,profiler->triPCTreeDistanceCycles,beamWidth,profiler);
             if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
             {
                 currObj = static_cast<tableint>(seed);
             }
         }
+        profiler->triPCTreeUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
 
         // TRI accelerated Level-0 search
+
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointTri(currObj,query_data,k,profiler->hnswTriDistanceComputations_PCTree,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        auto result = searchFromEntryPointTri(currObj, query_data, k,profiler->hnswTriDistanceComputations_PCTree,profiler->triPCTreeDistanceCycles,isIdAllowed, profiler);
+
+
+        profiler->triPCTreeLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswTriLevel0_PCTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswTriLevel0_PCTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
         return result;
     }
 
@@ -3357,7 +3489,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
 
         // Get multiple entry points from PCTree
-        std::vector<int> seeds =pctree_->searchNNMulti(query_f,profiler->pctreeDistanceComputationsMulti,beamWidth);
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        std::vector<int> seeds = pctree_->searchNNMulti(query_f,profiler->pctreeDistanceComputationsMulti,profiler->hnswPCTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->hnswPCTreeMultiUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
+
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3383,14 +3518,19 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+
+
         auto tree_start = std::chrono::high_resolution_clock::now();
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
         if (bare_bone_search)
         {
-            top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),profiler->hnswDistanceComputations_PCTreeMulti,isIdAllowed);
+            top_candidates = searchBaseLayerSTMulti<true>(entry_points, query_data, max(ef_, k),profiler->hnswDistanceComputations_PCTreeMulti,profiler->hnswPCTreeMultiDistanceCycles,isIdAllowed, nullptr, profiler);
         }
         else
         {
-            top_candidates =searchBaseLayerSTMulti<false>(entry_points,query_data,max(ef_, k),profiler->hnswDistanceComputations_PCTreeMulti,isIdAllowed);
+            top_candidates = searchBaseLayerSTMulti<false>(entry_points, query_data, max(ef_, k),profiler->hnswDistanceComputations_PCTreeMulti,profiler->hnswPCTreeMultiDistanceCycles,isIdAllowed, nullptr, profiler);
         }
         while (top_candidates.size() > k)
             top_candidates.pop();
@@ -3400,11 +3540,12 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first,getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+
+        profiler->hnswPCTreeMultiLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswLevel0PCTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswLevel0PCTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
+
         return result;
     }
 
@@ -3422,7 +3563,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // Get all K representatives from the selected leaf
         uint64_t ignoredCounter=0;
-        std::vector<int> seeds =pctree_->searchNNMulti(query_f,ignoredCounter,beamWidth);
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        std::vector<int> seeds = pctree_->searchNNMulti(query_f,ignoredCounter,profiler->fingerPCTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->fingerPCTreeMultiUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
+
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3445,12 +3589,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // HNSW Finger search using ALL selected entry points
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto  result = searchFromEntryPointFingerMulti(entry_points,query_data,k,profiler->hnswFingerDistanceComputations_PCTreeMulti,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        auto result = searchFromEntryPointFingerMulti(entry_points, query_data, k,profiler->hnswFingerDistanceComputations_PCTreeMulti,profiler->fingerPCTreeMultiDistanceCycles,isIdAllowed, profiler);
+
+        profiler->fingerPCTreeMultiLevel0Cycles += profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswFingerLevel0PCTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswFingerLevel0PCTreeMulti +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
+
         return result;
     }
 
@@ -3468,7 +3616,9 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // Get all K representatives from the selected leaf
         uint64_t ignoredCounter=0;
-        std::vector<int> seeds = pctree_->searchNNMulti(query_f,ignoredCounter,beamWidth);
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        std::vector<int> seeds = pctree_->searchNNMulti(query_f,ignoredCounter,profiler->triPCTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->triPCTreeMultiUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
 
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
@@ -3491,13 +3641,19 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW TRI search using ALL selected entry points
+
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result =  searchFromEntryPointTriMulti(entry_points,query_data,k,profiler->hnswTriDistanceComputations_PCTreeMulti,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        auto result = searchFromEntryPointTriMulti(entry_points, query_data, k,profiler->hnswTriDistanceComputations_PCTreeMulti,profiler->triPCTreeMultiDistanceCycles,isIdAllowed, profiler);
+
+
+        profiler->triPCTreeMultiLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswTriLevel0PCTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswTriLevel0PCTreeMulti +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
         return result;
     }
 
@@ -3510,26 +3666,24 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         priority_queue<pair<dist_t, labeltype>> result;
 
         if (cur_element_count == 0)
-        return result;
+            return result;
         tableint currObj = enterpoint_node_;
         
-        if (kmeanstree_ != nullptr) 
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+
+        if (kmeanstree_ != nullptr)
         {
-            const float* query_f =reinterpret_cast<const float*>(query_data);
+            const float* query_f = reinterpret_cast<const float*>(query_data);
             auto tree_start = std::chrono::high_resolution_clock::now();
-            int seed =kmeanstree_->searchNN(query_f,profiler->kmeansTreeDistanceComputations,beamWidth);
+            int seed = kmeanstree_->searchNN(query_f,profiler->kmeansTreeDistanceComputations,profiler->hnswKMeansTreeDistanceCycles,beamWidth,profiler);
             auto tree_end = std::chrono::high_resolution_clock::now();
-            if (profiler != nullptr)
-            {
-                profiler->kmeansTreeTimeNs += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-            }
-
-
+            profiler->kmeansTreeTimeNs += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
             if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
             {
                 currObj = static_cast<tableint>(seed);
             }
         }
+        profiler->hnswKMeansTreeUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
 
 
         // have to comment out next line
@@ -3538,16 +3692,19 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
-        auto tree_start = std::chrono::high_resolution_clock::now();
         bool bare_bone_search =!num_deleted_ && !isIdAllowed;
+
+        auto tree_start = std::chrono::high_resolution_clock::now();
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
 
         if (bare_bone_search)
         {
-            top_candidates =searchBaseLayerST<true>(currObj,query_data,max(ef_, k),profiler->hnswDistanceComputations_KMeansTree,isIdAllowed);
-        } 
-        else 
+            top_candidates = searchBaseLayerST<true, false, true>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations_KMeansTree,profiler->hnswKMeansTreeDistanceCycles,isIdAllowed, nullptr, profiler);
+        }
+        else
         {
-            top_candidates =searchBaseLayerST<false>(currObj,query_data,max(ef_, k),profiler->hnswDistanceComputations_KMeansTree,isIdAllowed);
+            top_candidates = searchBaseLayerST<false, false, true>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations_KMeansTree,profiler->hnswKMeansTreeDistanceCycles,isIdAllowed, nullptr, profiler);
         }
         while (top_candidates.size() > k)
             top_candidates.pop();
@@ -3557,11 +3714,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first,getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+        profiler->hnswKMeansTreeLevel0Cycles += profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswLevel0_KMeanTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswLevel0_KMeanTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
+
         return result;
     }
 
@@ -3574,25 +3731,32 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         tableint currObj = enterpoint_node_;
 
-        if (kmeanstree_ != nullptr) 
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        if (kmeanstree_ != nullptr)
         {
-            const float* query_f =reinterpret_cast<const float*>(query_data);
-            uint64_t ignoredCounter=0;
-            const int seed =kmeanstree_->searchNN(query_f,ignoredCounter,beamWidth);
-
-            if (seed >= 0 &&static_cast<size_t>(seed) < cur_element_count) 
+            const float* query_f = reinterpret_cast<const float*>(query_data);
+            uint64_t ignoredCounter = 0;
+            const int seed = kmeanstree_->searchNN(query_f,ignoredCounter,profiler->fingerKMeansTreeDistanceCycles,beamWidth,profiler);
+            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
             {
-                currObj =static_cast<tableint>(seed);
+                currObj = static_cast<tableint>(seed);
             }
         }
+        profiler->fingerKMeansTreeUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
+
         // HNSW Finger search from selected entry point
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointFinger(currObj,query_data,k,profiler->hnswFingerDistanceComputations_KMeansTree,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        auto result = searchFromEntryPointFinger(currObj, query_data, k,profiler->hnswFingerDistanceComputations_KMeansTree,profiler->fingerKMeansTreeDistanceCycles,isIdAllowed, profiler);
+
+        profiler->fingerKMeansTreeLevel0Cycles += profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswFingerLevel0_KMeanTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswFingerLevel0_KMeanTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
+
         return result;
     }
     
@@ -3607,24 +3771,33 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         tableint currObj = enterpoint_node_;
 
         // Get starting point from K-Means Tree
-        if (kmeanstree_ != nullptr) 
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        if (kmeanstree_ != nullptr)
         {
-            const float* query_f =reinterpret_cast<const float*>(query_data);
-            uint64_t ignoredCounter=0;
-            int seed =kmeanstree_->searchNN(query_f,ignoredCounter,beamWidth);
-            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count) 
+            const float* query_f = reinterpret_cast<const float*>(query_data);
+            uint64_t ignoredCounter = 0;
+
+            const int seed = kmeanstree_->searchNN(query_f,ignoredCounter,profiler->triKMeansTreeDistanceCycles,beamWidth,profiler);
+            if (seed >= 0 && static_cast<size_t>(seed) < cur_element_count)
             {
-                currObj =static_cast<tableint>(seed);
+                currObj = static_cast<tableint>(seed);
             }
         }
+
+        profiler->triKMeansTreeUpperLayerCycles += profiler->readCpuCycles() - upperLayerCyclesStart;
+
         // HNSW TRI search from selected entry point
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointTri(currObj,query_data,k,profiler->hnswTriDistanceComputations_KMeansTree,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+        auto result = searchFromEntryPointTri(currObj, query_data, k,profiler->hnswTriDistanceComputations_KMeansTree,profiler->triKMeansTreeDistanceCycles,isIdAllowed, profiler);
+
+        profiler->triKMeansTreeLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswTriLevel0_KMeanTree += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswTriLevel0_KMeanTree +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
+
         return result;
     }
 
@@ -3640,7 +3813,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
 
         // Get multiple entry points from KMeansTree
-        std::vector<int> seeds =kmeanstree_->searchNNMulti(query_f,profiler->kmeansTreeDistanceComputationsMulti,beamWidth);
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        std::vector<int> seeds = kmeanstree_->searchNNMulti(query_f,profiler->kmeansTreeDistanceComputationsMulti,profiler->hnswKMeansTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->hnswKMeansTreeMultiUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
+
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3667,14 +3843,17 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
+
+
         auto tree_start = std::chrono::high_resolution_clock::now();
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
         if (bare_bone_search)
         {
-            top_candidates =searchBaseLayerSTMulti<true>(entry_points,query_data,max(ef_, k),profiler->hnswDistanceComputations_KMeansTreeMulti,isIdAllowed);
+            top_candidates = searchBaseLayerSTMulti<true>(entry_points, query_data, max(ef_, k),profiler->hnswDistanceComputations_KMeansTreeMulti,profiler->hnswKMeansTreeMultiDistanceCycles,isIdAllowed, nullptr, profiler);
         }
         else
         {
-            top_candidates =searchBaseLayerSTMulti<false>(entry_points,query_data,max(ef_, k),profiler->hnswDistanceComputations_KMeansTreeMulti,isIdAllowed);
+            top_candidates = searchBaseLayerSTMulti<false>(entry_points, query_data, max(ef_, k),profiler->hnswDistanceComputations_KMeansTreeMulti,profiler->hnswKMeansTreeMultiDistanceCycles,isIdAllowed, nullptr, profiler);
         }
         while (top_candidates.size() > k)
             top_candidates.pop();
@@ -3684,11 +3863,12 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push({rez.first,getExternalLabel(rez.second)});
             top_candidates.pop();
         }
+
+        profiler->hnswKMeansTreeMultiLevel0Cycles += profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswLevel0KMeansTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswLevel0KMeansTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
+
         return result;
     }
 
@@ -3706,7 +3886,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
 
         // Get all K representatives from the selected leaf
         uint64_t ignoredCounter=0;
-        std::vector<int> seeds =kmeanstree_->searchNNMulti(query_f,ignoredCounter,beamWidth);
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        std::vector<int> seeds = kmeanstree_->searchNNMulti(query_f,ignoredCounter,profiler->fingerKMeansTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->fingerKMeansTreeMultiUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
+
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
         for (int seed : seeds)
@@ -3728,13 +3911,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW Finger search using ALL selected entry points
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointFingerMulti(entry_points,query_data,k,profiler->hnswFingerDistanceComputations_KMeansTreeMulti,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        auto result = searchFromEntryPointFingerMulti(entry_points, query_data, k,profiler->hnswFingerDistanceComputations_KMeansTreeMulti,profiler->fingerKMeansTreeMultiDistanceCycles,isIdAllowed, profiler);
+
+        profiler->fingerKMeansTreeMultiLevel0Cycles += profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswFingerLevel0KMeansTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswFingerLevel0KMeansTreeMulti +=std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
+
         return result;
     }
 
@@ -3751,8 +3939,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         const float* query_f =reinterpret_cast<const float*>(query_data);
 
         // Get all K representatives from the selected leaf
-        uint64_t ignoredCounter=0;
-        std::vector<int> seeds = kmeanstree_->searchNNMulti(query_f,ignoredCounter,beamWidth);
+    
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
+        uint64_t ignoredCounter = 0;
+        std::vector<int> seeds = kmeanstree_->searchNNMulti(query_f,ignoredCounter,profiler->triKMeansTreeMultiDistanceCycles,beamWidth,profiler);
+        profiler->triKMeansTreeMultiUpperLayerCycles += profiler->readCpuCycles() - upperLayerCyclesStart;
 
         std::vector<tableint> entry_points;
         entry_points.reserve(seeds.size());
@@ -3775,13 +3966,18 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // HNSW TRI search using ALL selected entry points
+
         auto tree_start = std::chrono::high_resolution_clock::now();
-        auto result = searchFromEntryPointTriMulti(entry_points,query_data,k,profiler->hnswTriDistanceComputations_KMeansTreeMulti,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+
+        auto result = searchFromEntryPointTriMulti(entry_points, query_data, k,profiler->hnswTriDistanceComputations_KMeansTreeMulti,profiler->triKMeansTreeMultiDistanceCycles,isIdAllowed, profiler);
+
+        profiler->triKMeansTreeMultiLevel0Cycles += profiler->readCpuCycles() - level0CyclesStart;
         auto tree_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswTriLevel0KMeansTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
-        }
+        profiler->hnswTriLevel0KMeansTreeMulti += std::chrono::duration<double, std::nano>(tree_end - tree_start).count();
+
+
         return result;
     }
 
@@ -3866,9 +4062,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         priority_queue<pair<dist_t, tableint>, vector<pair<dist_t, tableint>>, CompareByFirst> top_candidates;
 
         auto level0_start = std::chrono::high_resolution_clock::now();
-
         const uint64_t level0CyclesStart = profiler->readCpuCycles();
-
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
         if (bare_bone_search) 
         {
@@ -3878,13 +4072,6 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             top_candidates = searchBaseLayerST<false,false,true>(currObj, query_data, max(ef_, k),profiler->hnswDistanceComputations,profiler->hnswDistanceCycles,isIdAllowed,nullptr,profiler);
         }
-
-        profiler->hnswLevel0Cycles += profiler->readCpuCycles() - level0CyclesStart;
-        auto level0_end = std::chrono::high_resolution_clock::now();
-        
-        
-        profiler->hnswLevelTimeNs[0] += std::chrono::duration<double, std::nano>(level0_end - level0_start).count();
-
         while (top_candidates.size() > k) 
         {
             top_candidates.pop();
@@ -3895,6 +4082,9 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             result.push(pair<dist_t, labeltype>(rez.first, getExternalLabel(rez.second)));
             top_candidates.pop();
         }
+        profiler->hnswLevel0Cycles += profiler->readCpuCycles() - level0CyclesStart;
+        auto level0_end = std::chrono::high_resolution_clock::now();
+        profiler->hnswLevelTimeNs[0] += std::chrono::duration<double, std::nano>(level0_end - level0_start).count();
         return result;
     }
     
@@ -3905,12 +4095,21 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         priority_queue<pair<dist_t, labeltype>> result;
         if (cur_element_count == 0)
             return result;
+
+
+        const uint64_t fingerUpperLayerCyclesStart = profiler->readCpuCycles();
         tableint currObj = enterpoint_node_;
-        dist_t curdist =fstdistfunc_(query_data,getDataByInternalId(currObj),dist_func_param_);
+
+        // Distance Computation
+        const uint64_t fingerEntryDistanceCyclesStart = profiler->readCpuCycles();
+        dist_t curdist = fstdistfunc_(query_data, getDataByInternalId(currObj), dist_func_param_);
+        profiler->fingerDistanceCycles +=profiler->readCpuCycles() - fingerEntryDistanceCyclesStart;
+
+
         // profiler->hnswFingerDistanceComputations++;
-
-
         // Normal HNSW upper-level greedy descent.
+
+
         for (int level = maxlevel_; level > 0; --level) 
         {
             bool changed = true;
@@ -3923,7 +4122,13 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 for (int i = 0; i < size; ++i) 
                 {
                     tableint cand = datal[i];
-                    dist_t d = fstdistfunc_(query_data,getDataByInternalId(cand),dist_func_param_);
+
+                    // Distance Computations
+                    const uint64_t fingerNeighborDistanceCyclesStart = profiler->readCpuCycles();
+                    dist_t d = fstdistfunc_(query_data, getDataByInternalId(cand), dist_func_param_);
+                    profiler->fingerDistanceCycles +=profiler->readCpuCycles() - fingerNeighborDistanceCyclesStart;
+
+
                     // profiler->hnswFingerDistanceComputations++;
                     if (d < curdist) 
                     {
@@ -3934,15 +4139,19 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                 }
             }
         }
-
+        profiler->fingerUpperLayerCycles += profiler->readCpuCycles() - fingerUpperLayerCyclesStart;
         // Level-0 FINGER search.
+
+
         auto level0_start =std::chrono::high_resolution_clock::now();
-        result = searchFromEntryPointFinger(currObj,query_data,k,profiler->hnswFingerDistanceComputations,isIdAllowed);
+        const uint64_t fingerLevel0CyclesStart = profiler->readCpuCycles();
+
+        result = searchFromEntryPointFinger(currObj,query_data,k,profiler->hnswFingerDistanceComputations,profiler->fingerDistanceCycles,isIdAllowed,profiler);
+
+        profiler->fingerLevel0Cycles += profiler->readCpuCycles() - fingerLevel0CyclesStart;
         auto level0_end = std::chrono::high_resolution_clock::now();
-        if (profiler != nullptr)
-        {
-            profiler->hnswFingerLevel0TimeNs +=std::chrono::duration<double, std::nano>(level0_end - level0_start).count();
-        }
+        profiler->hnswFingerLevel0TimeNs +=std::chrono::duration<double, std::nano>(level0_end - level0_start).count();
+
         return result;
     }
 
@@ -4011,7 +4220,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         auto level0_start = std::chrono::high_resolution_clock::now();
 
         const uint64_t triLevel0CyclesStart = profiler->readCpuCycles();
-        auto result = searchFromEntryPointTri(currObj,query_data,k,profiler->hnswTriDistanceComputations,profiler->triDistanceCycles,isIdAllowed);
+        auto result = searchFromEntryPointTri(currObj,query_data,k,profiler->hnswTriDistanceComputations,profiler->triDistanceCycles,isIdAllowed,profiler);
         profiler->triLevel0Cycles +=profiler->readCpuCycles() - triLevel0CyclesStart;
 
         auto level0_end = std::chrono::high_resolution_clock::now();
@@ -4037,10 +4246,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         {
             throw std::runtime_error("TRI search requested before buildTriDistances().");
         }
+        
+        const uint64_t upperLayerCyclesStart = profiler->readCpuCycles();
         const auto upper_start = std::chrono::steady_clock::now();
-
         tableint currObj = enterpoint_node_;
-        dist_t curdist = fstdistfunc_(query_data,getDataByInternalId(currObj),dist_func_param_);
+        uint64_t distanceCyclesStart = profiler->readCpuCycles();
+        dist_t curdist = fstdistfunc_(
+        query_data, getDataByInternalId(currObj), dist_func_param_);
+        profiler->hnswTriAllLevelsDistanceCycles +=
+        profiler->readCpuCycles() - distanceCyclesStart;
+
         profiler->hnswUpperLayerDistanceComputationsTRI++;
         
 
@@ -4075,7 +4290,9 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
                         continue;
 
 
-                    dist_t candidateDist = fstdistfunc_(query_data,getDataByInternalId(candidate),dist_func_param_);
+                    const uint64_t distanceCyclesStart = profiler->readCpuCycles();
+                    dist_t candidateDist = fstdistfunc_(query_data, getDataByInternalId(candidate), dist_func_param_);
+                    profiler->hnswTriAllLevelsDistanceCycles +=profiler->readCpuCycles() - distanceCyclesStart;
                     profiler->hnswUpperLayerDistanceComputationsTRI++;
                     
                     if (candidateDist < bestDist)
@@ -4095,6 +4312,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         // printSeedDistance("HNSW-TRI-AllLevels", query_data, currObj);
+        profiler->hnswTriAllLevelsUpperLayerCycles +=profiler->readCpuCycles() - upperLayerCyclesStart;
 
         const auto upper_end = std::chrono::steady_clock::now();
 
@@ -4104,9 +4322,14 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
         }
 
         const auto level0_start = std::chrono::steady_clock::now();
-        auto result = searchFromEntryPointTri(currObj, query_data, k,profiler->hnswLevel0DistanceComputationsWithTRI,isIdAllowed);
+        const uint64_t level0CyclesStart = profiler->readCpuCycles();
+
+        auto result = searchFromEntryPointTri(currObj, query_data, k,profiler->hnswLevel0DistanceComputationsWithTRI,profiler->hnswTriAllLevelsDistanceCycles,isIdAllowed, profiler);
+
+        profiler->hnswTriAllLevelsLevel0Cycles +=profiler->readCpuCycles() - level0CyclesStart;
         const auto level0_end = std::chrono::steady_clock::now();
         profiler->hnswTriAllLevelsLevel0TimeNs +=std::chrono::duration<double, std::nano>(level0_end - level0_start).count();
+
         return result;
     }
     
@@ -4186,9 +4409,9 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t>
             }
         }
 
-        priority_queue<pair<dist_t, tableint>, vector<pair<dist_t, tableint>>, CompareByFirst> top_candidates;
-        uint64_t ignoredCounter=0;
-        top_candidates = searchBaseLayerST<false>(currObj, query_data, 0, ignoredCounter,isIdAllowed, &stop_condition);
+        priority_queue<pair<dist_t, tableint>,vector<pair<dist_t, tableint>>,CompareByFirst> top_candidates;
+        uint64_t ignoredCounter = 0;
+        uint64_t ignoredDistanceCycles = 0;top_candidates = searchBaseLayerST<false>(currObj, query_data, 0,ignoredCounter, ignoredDistanceCycles,isIdAllowed, &stop_condition);
 
         size_t sz = top_candidates.size();
         result.resize(sz);

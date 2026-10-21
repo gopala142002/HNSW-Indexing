@@ -1,4 +1,5 @@
 #include "mtree.h"
+#include "profiling.h"
 #include <algorithm>
 #include <functional>
 #include <limits>
@@ -427,7 +428,7 @@ int MTree::greedySearch(const float* query) const
 
 
 
-std::vector<const MTNode*> MTree::findLeafNodes(const float* query,uint64_t& distanceCounter,int beamWidth) const
+std::vector<const MTNode*> MTree::findLeafNodes(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const
 {
     std::vector<const MTNode*> result;
 
@@ -498,7 +499,11 @@ std::vector<const MTNode*> MTree::findLeafNodes(const float* query,uint64_t& dis
                 if (pivot == nullptr)
                     continue;
 
+
+                const uint64_t cyclesStart = profiler->readCpuCycles();
                 const float d = distance(query, pivot);
+                distanceCycles += profiler->readCpuCycles() - cyclesStart;
+
                 ++distanceCounter;
 
                 candidates.push({d, entry.child});
@@ -524,9 +529,9 @@ std::vector<const MTNode*> MTree::findLeafNodes(const float* query,uint64_t& dis
 
 
 
-int MTree::searchEntryPoint(const float* query,uint64_t& distanceCounter,int beamWidth) const
+int MTree::searchEntryPoint(const float* query,uint64_t& distanceCounter,uint64_t &distanceCycles,int beamWidth,profilingStats* profiler) const
 {
-    std::vector<const MTNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+    std::vector<const MTNode*> leaves = findLeafNodes(query,distanceCounter,distanceCycles,beamWidth,profiler);
 
     int bestID = -1;
     float bestDistance = std::numeric_limits<float>::infinity();
@@ -540,7 +545,11 @@ int MTree::searchEntryPoint(const float* query,uint64_t& distanceCounter,int bea
         if (vec == nullptr)
             continue;
 
+        const uint64_t cyclesStart = profiler->readCpuCycles();
         const float d = distance(query, vec);
+        distanceCycles += profiler->readCpuCycles() - cyclesStart;
+
+
         ++distanceCounter;
 
         if (d < bestDistance)
@@ -553,9 +562,9 @@ int MTree::searchEntryPoint(const float* query,uint64_t& distanceCounter,int bea
 }
 
 
-std::vector<int> MTree::searchEntryPointMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const
+std::vector<int> MTree::searchEntryPointMulti(const float* query,uint64_t& distanceCounter,uint64_t &distanceCycles,int beamWidth,profilingStats* profiler) const
 {
-    std::vector<const MTNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+    std::vector<const MTNode*> leaves = findLeafNodes(query,distanceCounter,distanceCycles,beamWidth,profiler);
 
     using Candidate = std::pair<float, int>;
 
@@ -576,7 +585,11 @@ std::vector<int> MTree::searchEntryPointMulti(const float* query,uint64_t& dista
             if (vec == nullptr)
                 continue;
 
+
+            const uint64_t cyclesStart = profiler->readCpuCycles();
             const float d = distance(query, vec);
+            distanceCycles += profiler->readCpuCycles() - cyclesStart;
+            
             ++distanceCounter;
             candidates.emplace(d, id);
         }

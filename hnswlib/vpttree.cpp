@@ -1,4 +1,5 @@
 #include "vpttree.h"
+#include "profiling.h"
 #include <algorithm>
 #include <limits>
 #include <numeric>
@@ -488,12 +489,12 @@ void VantagePointTree::preprocessLeafEntryPoints(VPTNode* node)
 
 
 
-int VantagePointTree::searchEntryPoint(const float* query,uint64_t& distanceCounter,int beamWidth) const
+int VantagePointTree::searchEntryPoint(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const
 {
     if (query == nullptr || beamWidth <= 0)
         return -1;
 
-    std::vector<const VPTNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+    std::vector<const VPTNode*> leaves = findLeafNodes(query, distanceCounter, distanceCycles,beamWidth, profiler);
 
     int bestID = -1;
     float bestDistance = std::numeric_limits<float>::infinity();
@@ -505,8 +506,9 @@ int VantagePointTree::searchEntryPoint(const float* query,uint64_t& distanceCoun
             continue;
         }
 
-        const float d = distance(query,getVector(leaf->centroidEntryPoint));
-
+        const uint64_t cyclesStart = profiler->readCpuCycles();
+        const float d = distance(query, getVector(leaf->centroidEntryPoint));
+        distanceCycles += profiler->readCpuCycles() - cyclesStart;
         ++distanceCounter;
 
         if (d < bestDistance)
@@ -521,7 +523,7 @@ int VantagePointTree::searchEntryPoint(const float* query,uint64_t& distanceCoun
 
 
 
-std::vector<const VPTNode*> VantagePointTree::findLeafNodes(const float* query,uint64_t& distanceCounter,int beamWidth) const
+std::vector<const VPTNode*> VantagePointTree::findLeafNodes(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const
 {
     std::vector<const VPTNode*> result;
 
@@ -586,7 +588,9 @@ std::vector<const VPTNode*> VantagePointTree::findLeafNodes(const float* query,u
                 continue;
             }
 
+            const uint64_t cyclesStart = profiler->readCpuCycles();
             const float d = distance(query, getVector(node->pivot));
+            distanceCycles += profiler->readCpuCycles() - cyclesStart;
             ++distanceCounter;
 
             const size_t childCount = std::min(node->children.size(),node->childMaxDistances.size());
@@ -627,12 +631,12 @@ std::vector<const VPTNode*> VantagePointTree::findLeafNodes(const float* query,u
 
 
 
-std::vector<int> VantagePointTree::searchEntryPointMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const
+std::vector<int> VantagePointTree::searchEntryPointMulti(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const
 {
     if (query == nullptr || beamWidth <= 0)
         return {};
 
-    std::vector<const VPTNode*> leaves = findLeafNodes(query, distanceCounter, beamWidth);
+    std::vector<const VPTNode*> leaves = findLeafNodes(query, distanceCounter, distanceCycles,beamWidth, profiler);
 
     using Candidate = std::pair<float, int>;
 
@@ -649,7 +653,9 @@ std::vector<int> VantagePointTree::searchEntryPointMulti(const float* query,uint
             {
                 continue;
             }
+            const uint64_t cyclesStart = profiler->readCpuCycles();
             const float d = distance(query, getVector(id));
+            distanceCycles += profiler->readCpuCycles() - cyclesStart;
             ++distanceCounter;
             candidates.emplace(d, id);
         }
@@ -665,14 +671,14 @@ std::vector<int> VantagePointTree::searchEntryPointMulti(const float* query,uint
 }
 
 
-int VantagePointTree::searchNN(const float* query,uint64_t& distanceCounter,int beamWidth) const
+int VantagePointTree::searchNN(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const
 {
-    return searchEntryPoint(query, distanceCounter, beamWidth);
+    return searchEntryPoint(query, distanceCounter, distanceCycles, beamWidth, profiler);
 }
 
-std::vector<int> VantagePointTree::searchNNMulti(const float* query,uint64_t& distanceCounter,int beamWidth) const
+std::vector<int> VantagePointTree::searchNNMulti(const float* query,uint64_t& distanceCounter,uint64_t& distanceCycles,int beamWidth,profilingStats* profiler) const
 {
-    return searchEntryPointMulti(query, distanceCounter, beamWidth);
+    return searchEntryPointMulti(query, distanceCounter, distanceCycles, beamWidth, profiler);
 }
 
 

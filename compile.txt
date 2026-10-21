@@ -49,3 +49,14 @@ g++ -O3 -std=c++17 -I. -Ihnswlib -I/usr/include/eigen3 combined_test.cpp hnswlib
 
 
 g++ -O3 -std=c++17 -I. -Ihnswlib -I/usr/include/eigen3 combined_test_diff_ef.cpp hnswlib/pctree.cpp hnswlib/vtree.cpp hnswlib/mtree.cpp hnswlib/vpttree.cpp hnswlib/kmeanstree.cpp -o combined_test_diff_ef
+
+
+
+results that we have 
+
+-> recall 
+-> latency (for upper levels (all levels latency)),entry point selection latency of all the trees and then how much of time taken by the trees
+-> Build time
+-> Total and avg/distance computations with all the approaches
+-> extra memory overhead
+-> CPU cycles breakdown (Level0 + upper levels) / out of all the cpu cycles how many went in distance computations
