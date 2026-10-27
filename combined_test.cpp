@@ -106,7 +106,7 @@ std::vector<size_t> extract_ids(std::priority_queue<std::pair<float, hnswlib::la
 
 int main(int argc, char** argv) 
 {
-    const std::string data_dir =(argc > 1)? argv[1]: "./datasets/glove";
+    const std::string data_dir =(argc > 1)? argv[1]: "./datasets/gist";
     const std::string base_path =data_dir + "/base.fvecs";
     const std::string query_path =data_dir + "/query.fvecs";
     const std::string gt_path =data_dir + "/groundtruth.ivecs";
@@ -210,13 +210,13 @@ int main(int argc, char** argv)
         }
     };
 
-    reset_csv("hnsw_results_glove.csv");
-    reset_csv("hnsw_distance_computations_glove.csv");
-    reset_csv("hnsw_cpu_cycles_glove.csv");
+    reset_csv("hnsw_results_gist.csv");
+    reset_csv("hnsw_distance_computations_gist.csv");
+    reset_csv("hnsw_cpu_cycles_gist.csv");
 
 
 
-    const std::string memory_csv_path = "hnsw_memory_glove.csv";
+    const std::string memory_csv_path = "hnsw_memory_gist.csv";
     std::ofstream memory_csv(memory_csv_path);
     if (!memory_csv)
     {
@@ -1161,7 +1161,7 @@ int main(int argc, char** argv)
 
 
                     // All timing values below are stored in NANOSECONDS.
-                    const std::string csv_path = "hnsw_results_glove.csv";
+                    const std::string csv_path = "hnsw_results_gist.csv";
                     static bool csv_header_written = false;
                     std::ofstream csv(csv_path, std::ios::app);
                     if (!csv) 
@@ -1386,7 +1386,7 @@ int main(int argc, char** argv)
 
                     
                     // distance computations csv
-                    const std::string distance_csv_path ="hnsw_distance_computations_glove.csv";
+                    const std::string distance_csv_path ="hnsw_distance_computations_gist.csv";
 
                     std::ofstream distance_csv(distance_csv_path, std::ios::app);
                     if (!distance_csv) 
@@ -1462,7 +1462,7 @@ int main(int argc, char** argv)
 
 
                     // Write CPU cycle profiling results to CSV
-                    const std::string cpu_cycles_csv_path = "hnsw_cpu_cycles_glove.csv";
+                    const std::string cpu_cycles_csv_path = "hnsw_cpu_cycles_gist.csv";
                     std::ofstream cpu_cycles_csv(cpu_cycles_csv_path, std::ios::app);
                     if (!cpu_cycles_csv)
                     {
