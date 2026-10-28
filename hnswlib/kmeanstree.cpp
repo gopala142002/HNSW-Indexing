@@ -11,6 +11,7 @@
 #include <queue>
 #include <unordered_set>
 #include <vector>
+#include <random>
 
 KMeansTree::KMeansTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t num_vectors,int numClusters,int leafCapacity,int leafClusters)
 {
@@ -481,14 +482,39 @@ int KMeansTree::searchNN(const float* query,uint64_t& distanceCounter,uint64_t& 
     int bestID = -1;
     float bestDistance = std::numeric_limits<float>::max();
 
+    // for (KMeansNode* leaf : leaves) 
+    // {
+    //     if (leaf == nullptr || leaf->representative < 0 || static_cast<size_t>(leaf->representative) >= num_vectors) 
+    //     {
+    //         continue;
+    //     }
+
+    //     const float* vector = getVector(leaf->representative);
+    //     const uint64_t cyclesStart = profiler->readCpuCycles();
+    //     float distance = squaredDistance(query, vector);
+    //     distanceCycles += profiler->readCpuCycles() - cyclesStart;
+    //     ++distanceCounter;
+
+    //     if (distance < bestDistance) 
+    //     {
+    //         bestDistance = distance;
+    //         bestID = leaf->representative;
+    //     }
+    // }
+
+
+    // Random entry point selection
+    static thread_local std::mt19937 rng(std::random_device{}());
+
     for (KMeansNode* leaf : leaves) 
     {
-        if (leaf == nullptr || leaf->representative < 0 || static_cast<size_t>(leaf->representative) >= num_vectors) 
+        if (leaf == nullptr || leaf->vectorIndices.empty()) 
         {
             continue;
         }
-
-        const float* vector = getVector(leaf->representative);
+        std::uniform_int_distribution<size_t> dist(0, leaf->vectorIndices.size() - 1);
+        int entryPoint = leaf->vectorIndices[dist(rng)];
+        const float* vector = getVector(entryPoint);
         const uint64_t cyclesStart = profiler->readCpuCycles();
         float distance = squaredDistance(query, vector);
         distanceCycles += profiler->readCpuCycles() - cyclesStart;
@@ -497,9 +523,10 @@ int KMeansTree::searchNN(const float* query,uint64_t& distanceCounter,uint64_t& 
         if (distance < bestDistance) 
         {
             bestDistance = distance;
-            bestID = leaf->representative;
+            bestID = entryPoint;
         }
     }
+
     return bestID;
 }
 

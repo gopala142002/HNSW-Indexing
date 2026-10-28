@@ -9,6 +9,7 @@
 #include <functional>
 #include <unordered_set>
 #include <limits>
+#include <random>
 
 PCTree::PCTree(const char* data_level0_memory,size_t data_size,size_t dim,size_t num_vectors,int leafCapacity,int numPartitions,int leafClusters)
 {
@@ -343,13 +344,9 @@ void PCTree::runLeafKMeans(const std::vector<int>& vectorIndices,std::vector<std
 
 void PCTree::populateLeaf(PCNode* node)
 {
-    // --- Approach 1: single leaf representative (unchanged behavior) ---
     std::vector<float> centroid = computeCentroid(node->vectorIndices);
     node->representative = findNearestToPoint(centroid.data(), node->vectorIndices);
 
-    // --- Approach 2: leaf-level K-Means for multiple HNSW entry points ---
-    // leafClusters == 1 naturally reduces to the same "nearest vector to
-    // leaf centroid" result as Approach 1 above.
     std::vector<std::vector<float>> leafCentroids;
     std::vector<std::vector<int>> leafClusterAssignments;
 
@@ -568,25 +565,51 @@ int PCTree::searchNN(const float* query,uint64_t& distanceCounter,uint64_t& dist
     int bestID = -1;
     float bestDistance = std::numeric_limits<float>::infinity();
 
-    for (const PCNode* leaf : leaves)
+    // for (const PCNode* leaf : leaves)
+    // {
+    //     if (leaf == nullptr || leaf->representative < 0 || static_cast<size_t>(leaf->representative) >= num_vectors)
+    //     {
+    //         continue;
+    //     }
+
+    //     const float* vector = getVector(leaf->representative);
+
+
+    //     const uint64_t cyclesStart = profiler->readCpuCycles();
+    //     const float d = squaredL2Distance(query, vector);
+    //     distanceCycles += profiler->readCpuCycles() - cyclesStart;
+    //     ++distanceCounter;
+
+    //     if (d < bestDistance)
+    //     {
+    //         bestDistance = d;
+    //         bestID = leaf->representative;
+    //     }
+    // }
+
+    // Random entry point selection
+
+    static thread_local std::mt19937 rng(std::random_device{}());
+
+    for (const PCNode* leaf : leaves) 
     {
-        if (leaf == nullptr || leaf->representative < 0 || static_cast<size_t>(leaf->representative) >= num_vectors)
+        if (leaf == nullptr || leaf->vectorIndices.empty()) 
         {
             continue;
         }
-
-        const float* vector = getVector(leaf->representative);
-
-
+        std::uniform_int_distribution<size_t> dist(0, leaf->vectorIndices.size() - 1);
+        int entryPoint = leaf->vectorIndices[dist(rng)];
+        const float* vector = getVector(entryPoint);
         const uint64_t cyclesStart = profiler->readCpuCycles();
         const float d = squaredL2Distance(query, vector);
         distanceCycles += profiler->readCpuCycles() - cyclesStart;
+
         ++distanceCounter;
 
-        if (d < bestDistance)
+        if (d < bestDistance) 
         {
             bestDistance = d;
-            bestID = leaf->representative;
+            bestID = entryPoint;
         }
     }
     return bestID;

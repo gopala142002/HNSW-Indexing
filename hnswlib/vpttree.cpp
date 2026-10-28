@@ -499,24 +499,54 @@ int VantagePointTree::searchEntryPoint(const float* query,uint64_t& distanceCoun
     int bestID = -1;
     float bestDistance = std::numeric_limits<float>::infinity();
 
-    for (const VPTNode* leaf : leaves)
+    // for (const VPTNode* leaf : leaves)
+    // {
+    //     if (leaf == nullptr || leaf->centroidEntryPoint < 0 || static_cast<size_t>(leaf->centroidEntryPoint) >= num_vectors)
+    //     {
+    //         continue;
+    //     }
+
+    //     const uint64_t cyclesStart = profiler->readCpuCycles();
+    //     const float d = distance(query, getVector(leaf->centroidEntryPoint));
+    //     distanceCycles += profiler->readCpuCycles() - cyclesStart;
+    //     ++distanceCounter;
+
+    //     if (d < bestDistance)
+    //     {
+    //         bestDistance = d;
+    //         bestID = leaf->centroidEntryPoint;
+    //     }
+    // }
+
+
+    // Random entry point selection
+    static thread_local std::mt19937 rng(std::random_device{}());
+
+    for (const VPTNode* leaf : leaves) 
     {
-        if (leaf == nullptr || leaf->centroidEntryPoint < 0 || static_cast<size_t>(leaf->centroidEntryPoint) >= num_vectors)
+        if (leaf == nullptr || leaf->vectorIndices.empty()) 
         {
             continue;
         }
 
+        std::uniform_int_distribution<size_t> dist(0, leaf->vectorIndices.size() - 1);
+
+        int entryPoint = leaf->vectorIndices[dist(rng)];
+
+        const float* vec = getVector(entryPoint);
+
         const uint64_t cyclesStart = profiler->readCpuCycles();
-        const float d = distance(query, getVector(leaf->centroidEntryPoint));
+        const float d = distance(query, vec);
         distanceCycles += profiler->readCpuCycles() - cyclesStart;
         ++distanceCounter;
 
-        if (d < bestDistance)
+        if (d < bestDistance) 
         {
             bestDistance = d;
-            bestID = leaf->centroidEntryPoint;
+            bestID = entryPoint;
         }
     }
+
     return bestID;
 }
 

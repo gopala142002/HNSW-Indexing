@@ -1,0 +1,8 @@
+leaf_capacity,numPartitions,structure,memory_bytes
+-1,-1,Normal HNSW,743186688
+-1,-1,HNSW + FINGER,2410184272
+-1,-1,HNSW + TRI,924459636
+64,4,MTree,71938520
+64,4,PCTree,46095772
+64,4,VPTree,42709936
+64,4,KMeansTree,138045172

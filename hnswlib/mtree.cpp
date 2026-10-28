@@ -7,7 +7,7 @@
 #include <vector>
 #include <queue>
 #include <unordered_set>
-
+#include <random>
 
 MTNode::~MTNode() 
 {
@@ -273,7 +273,7 @@ MTree::InsertResult MTree::splitNode(MTNode* node)
         return result;
     }
 
-    // --- INTERNAL NODE SPLIT (FIXED) ---
+    //INTERNAL NODE SPLIT (FIXED) 
 
     // 1. Preserve child subtrees in oldEntries before clearing
     std::vector<RoutingEntry> oldEntries = node->routingEntries;
@@ -536,28 +536,58 @@ int MTree::searchEntryPoint(const float* query,uint64_t& distanceCounter,uint64_
     int bestID = -1;
     float bestDistance = std::numeric_limits<float>::infinity();
 
-    for (const MTNode* leaf : leaves)
-    {
-        if (leaf == nullptr || leaf->centroidEntryPoint < 0)
-            continue;
+    // for (const MTNode* leaf : leaves)
+    // {
+    //     if (leaf == nullptr || leaf->centroidEntryPoint < 0)
+    //         continue;
 
-        const float* vec = getVector(leaf->centroidEntryPoint);
-        if (vec == nullptr)
+    //     const float* vec = getVector(leaf->centroidEntryPoint);
+    //     if (vec == nullptr)
+    //         continue;
+
+    //     const uint64_t cyclesStart = profiler->readCpuCycles();
+    //     const float d = distance(query, vec);
+    //     distanceCycles += profiler->readCpuCycles() - cyclesStart;
+
+
+    //     ++distanceCounter;
+
+    //     if (d < bestDistance)
+    //     {
+    //         bestDistance = d;
+    //         bestID = leaf->centroidEntryPoint;
+    //     }
+    // }
+
+    // Random entry point selection
+    static thread_local std::mt19937 rng(std::random_device{}());
+
+    for (const MTNode* leaf : leaves) 
+    {
+        if (leaf == nullptr || leaf->objectEntries.empty()) 
+        {
             continue;
+        }
+        std::uniform_int_distribution<size_t> dist(0, leaf->objectEntries.size() - 1);
+        int entryPoint = leaf->objectEntries[dist(rng)].vectorID;
+        const float* vec = getVector(entryPoint);
+        if (vec == nullptr) 
+        {
+            continue;
+        }
 
         const uint64_t cyclesStart = profiler->readCpuCycles();
         const float d = distance(query, vec);
         distanceCycles += profiler->readCpuCycles() - cyclesStart;
-
-
         ++distanceCounter;
 
-        if (d < bestDistance)
+        if (d < bestDistance) 
         {
             bestDistance = d;
-            bestID = leaf->centroidEntryPoint;
+            bestID = entryPoint;
         }
     }
+
     return bestID;
 }
 
